@@ -1,1 +1,3 @@
-# FLB_API
+# Backend
+
+This is the backend for the Fusion Lobby Browser.
