@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="FLB_API/FLB_API.csproj" />
+  <Project Path="FusionAPI/FusionAPI.csproj" />
+</Solution>
