@@ -32,6 +32,8 @@ namespace FusionAPI
 
         private ILogger? Logger;
 
+        private string previouslyStoredGuardData = null;
+
 
         public SteamKitHandler()
         {
@@ -65,20 +67,30 @@ namespace FusionAPI
             FriendsList = callback.FriendList;
         }
 
-        private void ConnectedCallback(SteamKit2.SteamClient.ConnectedCallback callback)
+        private async void ConnectedCallback(SteamKit2.SteamClient.ConnectedCallback callback)
         {
             Logger?.Info("Connected to Steam, logging in as {0}...", Username ?? "N/A");
-            SteamUser?.LogOn(new SteamKit2.SteamUser.LogOnDetails()
+            var authSession = await SteamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new()
             {
                 Username = Username,
                 Password = Password,
-
-                AuthCode = AuthCode,
-                TwoFactorCode = TwoFactorCode,
-                // Sets fake data to convince steam
                 ClientOSType = EOSType.Win11,
-                GamingDeviceType = EGamingDeviceType.StandardPC,
-                MachineName = "FusionServerBrowser",
+                DeviceFriendlyName = "Fusion Lobby Browser",
+                IsPersistentSession = true,
+                PlatformType = SteamKit2.Internal.EAuthTokenPlatformType.k_EAuthTokenPlatformType_SteamClient,
+                Authenticator = new UserConsoleAuthenticator(),
+                GuardData = previouslyStoredGuardData,
+
+            });
+            var pollResponse = await authSession.PollingWaitForResultAsync();
+            if (pollResponse.NewGuardData != null)
+            {
+                previouslyStoredGuardData = pollResponse.NewGuardData;
+            }
+            SteamUser?.LogOn(new SteamKit2.SteamUser.LogOnDetails()
+            {
+                Username = pollResponse.AccountName,
+                AccessToken = pollResponse.RefreshToken,
                 ShouldRememberPassword = true,
             });
         }
