@@ -6,7 +6,7 @@ namespace FusionAPI.Interfaces
     {
         public bool IsInitialized { get; }
 
-        public Task<IMatchmakingLobby[]> GetLobbies();
+        public Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false);
 
         public bool IsFriend(ulong id);
 

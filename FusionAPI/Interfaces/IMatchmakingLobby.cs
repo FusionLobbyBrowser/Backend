@@ -13,5 +13,7 @@ namespace FusionAPI.Interfaces
         public bool IsOwnerMe { get; }
 
         public string GetData(string key);
+
+        public bool TryGetData(string key, out string value);
     }
 }

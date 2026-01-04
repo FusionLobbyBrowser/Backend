@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using FusionAPI;
 using FusionAPI.Data.Containers;
 
@@ -10,8 +12,6 @@ namespace FLB_API
 {
     public static class Program
     {
-        public static int INTERVAL { get; set; } = 30;
-
         public static Fusion? FusionClient { get; private set; }
 
         internal static Serilog.Core.Logger? Logger { get; private set; }
@@ -22,6 +22,21 @@ namespace FLB_API
 
         internal static PlayerCount? PlayerCount { get; private set; }
 
+        internal static DateTime Uptime { get; private set; }
+
+        internal static Settings? Settings { get; private set; }
+
+        internal static Settings DefaultSettings { get; } = new()
+        {
+            Interval = 30,
+            ModIO_Token = "your-token",
+            Authentication = new Auth()
+            {
+                Username = "",
+                Password = "",
+            }
+        };
+
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +45,7 @@ namespace FLB_API
 
             try
             {
+                LoadSettings();
                 // I FUCKING HATE VISUAL STUDIO, WHY DO I HAVE TO DISABLE 3 FUCKING WARNINGS.
 #pragma warning disable RCS1222
 #pragma warning disable IDE0079
@@ -64,9 +80,26 @@ namespace FLB_API
                 {
                     AnsiConsole.MarkupLine("[grey]Connecting with SteamKit[/]");
                     FusionClient = new Fusion(new SteamKitHandler());
-                    ((SteamKitHandler)FusionClient.Handler).TwoFactorRequired = (type) => AnsiConsole.Prompt<string>(new TextPrompt<string>($"[bold yellow]{(type == SteamKitHandler.TwoFactorType.Authenticator ? "Authenticator" : "Email")} Code:[/] "));
-                    metadata.Add("username", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Username:[/] ")));
-                    metadata.Add("password", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Password:[/] ")));
+                    ((SteamKitHandler)FusionClient.Handler).Authenticator = new CustomUserAuth(
+                        () =>
+                        {
+                            AnsiConsole.MarkupLine("[bold yellow] > Awaiting device confirmation on Steam Guard, press any key when accepted...[/]");
+                            Console.ReadKey(true);
+                            return Task.FromResult(true);
+                        },
+                        (_) => AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow] > Enter the code from your authenticator: [/]")),
+                        (email, _) => AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"))
+                        );
+                    if (string.IsNullOrWhiteSpace(Settings?.Authentication?.Username) || string.IsNullOrWhiteSpace(Settings?.Authentication?.Password))
+                    {
+                        metadata.Add("username", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Username:[/] ")));
+                        metadata.Add("password", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Password:[/] ")));
+                    }
+                    else
+                    {
+                        metadata.Add("username", Settings.Authentication.Username);
+                        metadata.Add("password", Settings.Authentication.Password);
+                    }
                     AnsiConsole.MarkupLine("[grey]Using provided login to authenticate[/]");
                 }
                 else
@@ -78,6 +111,7 @@ namespace FLB_API
                 var logger = new Logger(level);
                 await FusionClient.Initialize(logger, metadata);
                 AnsiConsole.MarkupLine("[lime]Successfully initialized Fusion API[/]");
+                Uptime = DateTime.UtcNow;
             }
             catch (Exception e)
             {
@@ -88,14 +122,11 @@ namespace FLB_API
                 return;
             }
 
-            Logger = new Serilog.LoggerConfiguration()
+            Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .WriteTo.Spectre(restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Information)
                 .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
                 .CreateLogger();
-
-            Logger.Information("Fetching ModIO token from file...");
-            ModIOManager.GetToken();
 
             builder.Logging.ClearProviders();
             builder.Logging.AddSerilog(Logger);
@@ -134,7 +165,7 @@ namespace FLB_API
 
         private static async Task GetLobbies(CancellationToken token)
         {
-            SetIntervalFromFile();
+            LoadSettings();
             while (FusionClient != null && FusionClient.Handler?.IsInitialized == true && !token.IsCancellationRequested)
             {
                 try
@@ -148,36 +179,56 @@ namespace FLB_API
                     Lobbies = FusionClient.FilterLobbies(lobbies, true, false);
                     Date = DateTime.UtcNow;
                     Logger?.Information($"Successfully fetched lobbies ({Lobbies.Length})...");
-                    SetIntervalFromFile();
+                    LoadSettings();
                 }
                 catch (Exception e)
                 {
                     Logger?.Error(e, "Failed to fetch LabFusion lobbies.");
                 }
-                await Task.Delay(INTERVAL * 1000, token);
+                await Task.Delay((Settings?.Interval ?? 30) * 1000, token);
             }
         }
 
-        private static void SetIntervalFromFile()
+        private static void LoadSettings()
         {
-            Logger?.Information("Checking for new interval...");
             try
             {
-                var file = Path.Combine(Directory.GetCurrentDirectory(), "interval.txt");
-                if (File.Exists(file))
+                if (Logger != null)
+                    Logger?.Information("Loading settings...");
+                else
+                    AnsiConsole.WriteLine("Loading settings...");
+                var path = Path.Combine(Directory.GetCurrentDirectory(), "settings.json");
+                if (!File.Exists(path))
                 {
-                    INTERVAL = int.Parse(File.ReadAllText(file).Trim());
-                    Logger?.Information("Interval set from file: " + INTERVAL);
+                    if (Logger != null)
+                        Logger?.Information("Settings file is missing, creating new and exiting application...");
+                    else
+                        AnsiConsole.WriteLine("Settings file is missing, creating new and exiting application...");
+                    using var stream = File.CreateText(path);
+                    var serialized = JsonSerializer.Serialize(DefaultSettings);
+                    stream.Write(serialized);
+                    stream.Flush();
+                    stream.Close();
+                    Environment.Exit(0);
+                    return;
                 }
                 else
                 {
-                    Logger?.Warning("Interval file not found.");
+                    Settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path));
+                    if (Logger != null)
+                        Logger?.Information("Successfully loaded settings!");
+                    else
+                        AnsiConsole.WriteLine("Successfully loaded settings!");
                 }
             }
             catch (Exception ex)
             {
-                Logger?.Error(ex, "Failed to check for new interval in file");
+                if (Logger != null)
+                    Logger?.Error(ex, "Failed to set settings from file");
+                else
+                    AnsiConsole.WriteException(ex);
             }
+
         }
     }
 }

@@ -1,11 +1,6 @@
 ﻿using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
-using SteamKit2;
-
-using Steamworks;
-using Steamworks.Data;
-
 namespace FusionAPI
 {
     public class Fusion(ISteamHandler handler)
@@ -25,7 +20,7 @@ namespace FusionAPI
                 return [];
 
             // Fetch lobbies
-            var lobbies = await Handler.GetLobbies();
+            var lobbies = await Handler.GetLobbies(includePrivate);
 
             List<LobbyInfo> netLobbies = [];
 
@@ -37,7 +32,7 @@ namespace FusionAPI
 
                 var metadata = LobbyMetadataInfo.Read(lobby);
 
-                if (!metadata.HasServerOpen)
+                if (!metadata.HasLobbyOpen)
                     continue;
 
                 if (!includePrivate && IsPrivate(metadata.LobbyInfo))
@@ -79,7 +74,7 @@ namespace FusionAPI
             if (lobby.Privacy == Data.Enums.ServerPrivacy.LOCKED)
                 return true;
 
-            if (lobby.Privacy == Data.Enums.ServerPrivacy.FRIENDS_ONLY && !Handler.IsFriend(lobby.LobbyId))
+            if (lobby.Privacy == Data.Enums.ServerPrivacy.FRIENDS_ONLY && !Handler.IsFriend(lobby.LobbyID))
                 return true;
 
             return false;

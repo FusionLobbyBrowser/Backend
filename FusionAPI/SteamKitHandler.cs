@@ -1,4 +1,5 @@
-﻿using FusionAPI.Interfaces;
+﻿using FusionAPI.Data.Enums;
+using FusionAPI.Interfaces;
 
 using SteamKit2;
 using SteamKit2.Authentication;
@@ -27,6 +28,8 @@ namespace FusionAPI
         public bool IsInitialized => SteamClient?.IsConnected == true && IsLoggedOn;
 
         public Func<TwoFactorType, string>? TwoFactorRequired;
+
+        public IAuthenticator Authenticator;
 
         private string? TwoFactorCode, AuthCode;
 
@@ -78,7 +81,7 @@ namespace FusionAPI
                 DeviceFriendlyName = "Fusion Lobby Browser",
                 IsPersistentSession = true,
                 PlatformType = SteamKit2.Internal.EAuthTokenPlatformType.k_EAuthTokenPlatformType_SteamClient,
-                Authenticator = new UserConsoleAuthenticator(),
+                Authenticator = Authenticator ?? new UserConsoleAuthenticator(),
                 GuardData = previouslyStoredGuardData,
 
             });
@@ -170,13 +173,22 @@ namespace FusionAPI
             Logger?.Info("Logged off from Steam.");
         }
 
-        public async Task<IMatchmakingLobby[]> GetLobbies()
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
             List<Filter> filters = [
                     new DistanceFilter(ELobbyDistanceFilter.Worldwide),
                     new SlotsAvailableFilter(int.MaxValue),
-                    new StringFilter(LobbyConstants.HasServerOpenKey, ELobbyComparison.Equal, bool.TrueString)
+                    new StringFilter(LobbyKeys.HasLobbyOpenKey, ELobbyComparison.Equal, bool.TrueString),
+                    new StringFilter(LobbyKeys.IdentifierKey, ELobbyComparison.Equal, bool.TrueString),
+                    new StringFilter(LobbyKeys.GameKey, ELobbyComparison.Equal, "BONELAB"),
                 ];
+            if (!includePrivate)
+            {
+                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.PRIVATE));
+                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.LOCKED));
+                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.FRIENDS_ONLY));
+            }
+
             if (Matchmaking == null)
                 return [];
 
@@ -231,6 +243,17 @@ namespace FusionAPI
                     return lobby.Metadata[key];
                 return string.Empty;
             }
+
+            public bool TryGetData(string key, out string value)
+            {
+                if (lobby.Metadata.ContainsKey(key))
+                {
+                    value = lobby.Metadata[key];
+                    return !string.IsNullOrEmpty(value);
+                }
+                value = string.Empty;
+                return false;
+            }
         }
 
         public enum TwoFactorType
@@ -238,5 +261,23 @@ namespace FusionAPI
             Email,
             Authenticator
         }
+    }
+
+    public class CustomUserAuth(Func<Task<bool>> acceptDeviceConfirmation, Func<bool, Task<string>> getDeviceCode, Func<string, bool, Task<string>> getEmailCode) : IAuthenticator
+    {
+        private Func<Task<bool>> _acceptDeviceConfirmation { get; } = acceptDeviceConfirmation;
+
+        private Func<bool, Task<string>> _getDeviceCode { get; } = getDeviceCode;
+
+        private Func<string, bool, Task<string>> _getEmailCode { get; } = getEmailCode;
+
+        public async Task<bool> AcceptDeviceConfirmationAsync()
+            => await _acceptDeviceConfirmation.Invoke();
+
+        public async Task<string> GetDeviceCodeAsync(bool previousCodeWasIncorrect)
+            => await _getDeviceCode.Invoke(previousCodeWasIncorrect);
+
+        public async Task<string> GetEmailCodeAsync(string email, bool previousCodeWasIncorrect)
+            => await _getEmailCode.Invoke(email, previousCodeWasIncorrect);
     }
 }

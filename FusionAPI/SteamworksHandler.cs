@@ -1,4 +1,5 @@
-﻿using FusionAPI.Interfaces;
+﻿using FusionAPI.Data.Enums;
+using FusionAPI.Interfaces;
 
 using Steamworks;
 using Steamworks.Data;
@@ -11,9 +12,9 @@ namespace FusionAPI
 
         private ILogger? Logger;
 
-        public async Task<IMatchmakingLobby[]> GetLobbies()
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
-            var lobbies = ConvertLobbies(await GetSteamLobbies());
+            var lobbies = ConvertLobbies(await GetSteamLobbies(includePrivate));
             return [.. lobbies];
         }
 
@@ -27,13 +28,18 @@ namespace FusionAPI
             return list;
         }
 
-        internal static async Task<Lobby[]> GetSteamLobbies()
+        internal static async Task<Lobby[]> GetSteamLobbies(bool includePrivate = false)
         {
             var list = Steamworks.SteamMatchmaking.LobbyList;
             list.FilterDistanceWorldwide();
             list.WithMaxResults(int.MaxValue);
             list.WithSlotsAvailable(int.MaxValue);
-            list.WithKeyValue(LobbyConstants.HasServerOpenKey, bool.TrueString);
+            list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
+            list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
+            list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
+            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PRIVATE);
+            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.LOCKED);
+            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
 
             return await list.RequestAsync();
         }
@@ -67,5 +73,11 @@ namespace FusionAPI
 
         public string GetData(string key)
             => lobby.GetData(key);
+
+        public bool TryGetData(string key, out string value)
+        {
+            value = lobby.GetData(key);
+            return !string.IsNullOrWhiteSpace(value);
+        }
     }
 }

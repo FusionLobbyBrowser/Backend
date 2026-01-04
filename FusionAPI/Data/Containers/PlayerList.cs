@@ -6,5 +6,6 @@ namespace FusionAPI.Data.Containers;
 public class PlayerList
 {
     [JsonPropertyName("players")]
-    public PlayerInfo[] Players { get; set; }
+    public PlayerInfo[] Players { get; set; } = [];
+
 }

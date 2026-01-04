@@ -4,7 +4,6 @@ namespace FLB_API
 {
     public static class ModIOManager
     {
-        public static string Token { get; set; } = "";
 
         private const long ExpireTime = 30 * 60;
 
@@ -12,27 +11,12 @@ namespace FLB_API
 
         private static readonly List<long> Processing = [];
 
-        public static bool GetToken()
-        {
-            var file = Path.Combine(Directory.GetCurrentDirectory(), "modio_token.txt");
-            if (File.Exists(file))
-            {
-                Token = File.ReadAllText(file).Trim();
-                Program.Logger?.Information("Mod.io token loaded from file.");
-                return true;
-            }
-            else
-            {
-                Program.Logger?.Warning("Mod.io token file not found. Remote mod thumbnails will not be available.");
-                return false;
-            }
-        }
-
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
             Program.Logger?.Information($"Remotely fetching mod thumbnail for {modId}");
 
-            if (string.IsNullOrWhiteSpace(Token) && !GetToken())
+
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIO_Token) || Program.Settings.ModIO_Token == "your-token")
             {
                 Program.Logger?.Warning("Mod.io token is not set. Cannot fetch remote mod thumbnail.");
                 return null;
@@ -40,7 +24,7 @@ namespace FLB_API
 
             var client = new HttpClient();
             var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.mod.io/v1/games/3809/mods/{modId}");
-            request.Headers.Add("Authorization", "Bearer " + Token);
+            request.Headers.Add("Authorization", "Bearer " + Program.Settings.ModIO_Token);
             request.Headers.Add("X-Modio-Platform", "windows");
             request.Headers.Add("Accept", "application/json");
             var response = await client.SendAsync(request);

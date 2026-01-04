@@ -13,7 +13,7 @@ namespace FLB_API
 
         public PlayerCount PlayerCount { get; set; } = count;
 
-        public int Interval { get; set; } = Program.INTERVAL;
+        public int Interval { get; set; } = Program.Settings?.Interval ?? 30;
     }
 
     public class PlayerCount(int players, int lobbies)
