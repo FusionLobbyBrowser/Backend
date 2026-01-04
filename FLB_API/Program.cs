@@ -171,14 +171,14 @@ namespace FLB_API
                 try
                 {
                     Logger?.Information("Fetching lobbies...");
-                    var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: true, includeSelf: true);
+                    var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
                     int players = 0;
                     foreach (var lobby in lobbies)
                         players += lobby.PlayerCount;
                     PlayerCount = new(players, lobbies.Length);
-                    Lobbies = FusionClient.FilterLobbies(lobbies, true, false);
                     Date = DateTime.UtcNow;
-                    Logger?.Information($"Successfully fetched lobbies ({Lobbies.Length})...");
+                    Lobbies = lobbies;
+                    Logger?.Information($"Successfully fetched lobbies ({lobbies.Length})...");
                     LoadSettings();
                 }
                 catch (Exception e)

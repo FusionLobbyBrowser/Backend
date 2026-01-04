@@ -37,9 +37,12 @@ namespace FusionAPI
             list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
-            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PRIVATE);
-            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.LOCKED);
-            list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
+            if (!includePrivate)
+            {
+                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PRIVATE);
+                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.LOCKED);
+                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
+            }
 
             return await list.RequestAsync();
         }
