@@ -86,9 +86,9 @@ namespace FLB_API
                     choice = choices.Item2;
                 }
 
-                if (!preferences)
+                if (!preferences && Settings?.Preferences?.Use != false)
                 {
-                    var answer = await AnsiConsole.AskAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
+                    var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
                     if (answer && Settings != null)
                         await SavePreferences(level, choice);
                 }
