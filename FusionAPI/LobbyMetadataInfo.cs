@@ -23,13 +23,13 @@ namespace FusionAPI
             Game = null,
         };
 
-        public LobbyInfo LobbyInfo { get; set; }
+        public LobbyInfo? LobbyInfo { get; set; }
 
         public bool HasLobbyOpen { get; set; }
 
         public bool ClientHasLevel { get; set; }
 
-        public string LobbyCode { get; set; }
+        public string? LobbyCode { get; set; }
 
         public ServerPrivacy Privacy { get; set; }
 
@@ -39,7 +39,7 @@ namespace FusionAPI
 
         public int VersionMinor { get; set; }
 
-        public string Game { get; set; }
+        public string? Game { get; set; }
 
         public static LobbyMetadataInfo Read(IMatchmakingLobby lobby)
         {

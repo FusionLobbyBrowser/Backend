@@ -5,7 +5,7 @@ using LogLevel = FusionAPI.Interfaces.ILogger.LogLevel;
 
 namespace FLB_API
 {
-    internal class Logger : ILogger
+    public class Logger : ILogger
     {
         public LogLevel Level { get; set; }
 
@@ -29,7 +29,6 @@ namespace FLB_API
             this.Level = LogLevel.Info;
         }
 
-
         public Logger(LogLevel level, string prefix)
         {
             this.Level = level;
@@ -42,8 +41,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            string markup = $"[red] >{FormatPrefix()} [[ERROR]] {Markup.Escape(msg)}[/]";
-            AnsiConsole.MarkupLine(markup);
+            Program.Logger?.Error($"{FormatPrefix()}{msg}");
         }
 
         public void Info(string message, params object[] args)
@@ -52,8 +50,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            string markup = $"[grey] >{FormatPrefix()} [[INFO]] {Markup.Escape(msg)}[/]";
-            AnsiConsole.MarkupLine(markup);
+            Program.Logger?.Information($"{FormatPrefix()}{msg}");
         }
 
         public void Trace(string message, params object[] args)
@@ -62,8 +59,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            string markup = $"[dodgerblue1] >{FormatPrefix()} [[TRACE]] {Markup.Escape(msg)}[/]";
-            AnsiConsole.MarkupLine(markup);
+            Program.Logger?.Verbose($"{FormatPrefix()}{msg}");
         }
 
         public void Warning(string message, params object[] args)
@@ -72,10 +68,9 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            string markup = $"[yellow] >{FormatPrefix()} [[WARN]] {Markup.Escape(msg)}[/]";
-            AnsiConsole.MarkupLine(markup);
+            Program.Logger?.Warning($"{FormatPrefix()}{msg}");
         }
 
-        private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $" [[{Prefix}]]" : string.Empty)}";
+        private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $"[[{Prefix}]] " : string.Empty)}";
     }
 }

@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using FLB_API.Managers;
+
+using Microsoft.AspNetCore.Mvc;
 
 namespace FLB_API.Controllers
 {

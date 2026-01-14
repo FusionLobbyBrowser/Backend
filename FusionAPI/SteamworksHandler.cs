@@ -30,7 +30,7 @@ namespace FusionAPI
 
         internal static async Task<Lobby[]> GetSteamLobbies(bool includePrivate = false)
         {
-            var list = Steamworks.SteamMatchmaking.LobbyList;
+            var list = SteamMatchmaking.LobbyList;
             list.FilterDistanceWorldwide();
             list.WithMaxResults(int.MaxValue);
             list.WithSlotsAvailable(int.MaxValue);
@@ -50,10 +50,13 @@ namespace FusionAPI
         public Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
             Logger = logger;
+#pragma warning disable IDE0079 // Remove unnecessary suppression, yeah sure this is absolutely fucking unnecessary, not like you're screaming at me for having something I cannot fix
+#pragma warning disable S2696
             Dispatch.OnDebugCallback += SteamworksDebug;
             Dispatch.OnException += SteamworksError;
-            Steamworks.SteamClient.Init(Fusion.AppID);
-            if (!Steamworks.SteamClient.IsValid)
+#pragma warning restore S2696, IDE0079
+            SteamClient.Init(Fusion.AppID);
+            if (!SteamClient.IsValid)
                 throw new InvalidOperationException("Steamworks failed to initialize!");
             return Task.CompletedTask;
         }

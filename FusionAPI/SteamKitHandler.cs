@@ -11,7 +11,7 @@ namespace FusionAPI
 {
     public class SteamKitHandler : ISteamHandler
     {
-        public SteamKit2.SteamClient? SteamClient { get; }
+        public SteamClient? SteamClient { get; }
 
         public CallbackManager? CallbackManager { get; }
 
@@ -27,20 +27,17 @@ namespace FusionAPI
 
         public bool IsInitialized => SteamClient?.IsConnected == true && IsLoggedOn;
 
-        public Func<TwoFactorType, string>? TwoFactorRequired;
+        public Func<TwoFactorType, string>? TwoFactorRequired { get; set; }
 
-        public IAuthenticator Authenticator;
-
-        private string? TwoFactorCode, AuthCode;
+        public IAuthenticator? Authenticator { get; set; }
 
         private ILogger? Logger;
 
-        private string previouslyStoredGuardData = null;
-
+        private string? previouslyStoredGuardData;
 
         public SteamKitHandler()
         {
-            SteamClient = new SteamKit2.SteamClient();
+            SteamClient = new SteamClient();
             Matchmaking = SteamClient.GetHandler<SteamMatchmaking>();
 
             SteamUser = SteamClient.GetHandler<SteamUser>();
@@ -48,11 +45,11 @@ namespace FusionAPI
                 throw new InvalidOperationException("Failed to get SteamUser handler from SteamKit!");
 
             CallbackManager = new CallbackManager(SteamClient);
-            CallbackManager.Subscribe<SteamKit2.SteamClient.ConnectedCallback>(ConnectedCallback);
-            CallbackManager.Subscribe<SteamKit2.SteamClient.DisconnectedCallback>(DisconnectedCallback);
-            CallbackManager.Subscribe<SteamKit2.SteamUser.LoggedOnCallback>(LoggedOnCallback);
-            CallbackManager.Subscribe<SteamKit2.SteamUser.LoggedOffCallback>(LoggedOffCallback);
-            CallbackManager.Subscribe<SteamKit2.SteamFriends.FriendsListCallback>(FriendsListCallback);
+            CallbackManager.Subscribe<SteamClient.ConnectedCallback>(ConnectedCallback);
+            CallbackManager.Subscribe<SteamClient.DisconnectedCallback>(DisconnectedCallback);
+            CallbackManager.Subscribe<SteamUser.LoggedOnCallback>(LoggedOnCallback);
+            CallbackManager.Subscribe<SteamUser.LoggedOffCallback>(LoggedOffCallback);
+            CallbackManager.Subscribe<SteamFriends.FriendsListCallback>(FriendsListCallback);
 
             Task.Run(async () =>
             {
@@ -70,79 +67,75 @@ namespace FusionAPI
             FriendsList = callback.FriendList;
         }
 
-        private async void ConnectedCallback(SteamKit2.SteamClient.ConnectedCallback callback)
+        private async void ConnectedCallback(SteamClient.ConnectedCallback callback)
         {
-            Logger?.Info("Connected to Steam, logging in as {0}...", Username ?? "N/A");
-            var authSession = await SteamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new()
+            try
             {
-                Username = Username,
-                Password = Password,
-                ClientOSType = EOSType.Win11,
-                DeviceFriendlyName = "Fusion Lobby Browser",
-                IsPersistentSession = true,
-                PlatformType = SteamKit2.Internal.EAuthTokenPlatformType.k_EAuthTokenPlatformType_SteamClient,
-                Authenticator = Authenticator ?? new UserConsoleAuthenticator(),
-                GuardData = previouslyStoredGuardData,
+                Logger?.Info("Connected to Steam, logging in as {0}...", Username ?? "N/A");
 
-            });
-            var pollResponse = await authSession.PollingWaitForResultAsync();
-            if (pollResponse.NewGuardData != null)
-            {
-                previouslyStoredGuardData = pollResponse.NewGuardData;
+                if (SteamClient == null)
+                    return;
+
+                var authSession = await SteamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new()
+                {
+                    Username = Username,
+                    Password = Password,
+                    ClientOSType = EOSType.Win11,
+                    DeviceFriendlyName = "Fusion Lobby Browser",
+                    IsPersistentSession = true,
+                    PlatformType = SteamKit2.Internal.EAuthTokenPlatformType.k_EAuthTokenPlatformType_SteamClient,
+                    Authenticator = Authenticator ?? new UserConsoleAuthenticator(),
+                    GuardData = previouslyStoredGuardData,
+                });
+
+                var pollResponse = await authSession.PollingWaitForResultAsync();
+                if (pollResponse.NewGuardData != null)
+                    previouslyStoredGuardData = pollResponse.NewGuardData;
+
+                SteamUser?.LogOn(new SteamUser.LogOnDetails()
+                {
+                    Username = pollResponse.AccountName,
+                    AccessToken = pollResponse.RefreshToken,
+                    ShouldRememberPassword = true,
+                });
             }
-            SteamUser?.LogOn(new SteamKit2.SteamUser.LogOnDetails()
+            catch (Exception ex)
             {
-                Username = pollResponse.AccountName,
-                AccessToken = pollResponse.RefreshToken,
-                ShouldRememberPassword = true,
-            });
+                Logger?.Error("An error occurred during Steam authentication: {0}", ex);
+                SteamClient?.Disconnect();
+            }
         }
 
-        private void DisconnectedCallback(SteamKit2.SteamClient.DisconnectedCallback callback)
+        private void DisconnectedCallback(SteamClient.DisconnectedCallback callback)
         {
             Logger?.Info("Disconnected from Steam.");
-            Task.Run(async () =>
-            {
-                await Task.Delay(5000);
-                Logger?.Info("Reconnecting to Steam...");
-                SteamClient?.Connect();
-
-            });
+            Task.Run(async () => await ReconnectAsync());
         }
 
-        private void LoggedOnCallback(SteamKit2.SteamUser.LoggedOnCallback callback)
+        private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
         {
-            bool isSteamGuard = callback.Result == EResult.AccountLogonDenied;
-            bool is2FA = callback.Result == EResult.AccountLoginDeniedNeedTwoFactor;
-            bool needsTwoFactor = isSteamGuard || is2FA;
-            TwoFactorType type = !is2FA ? TwoFactorType.Email : TwoFactorType.Authenticator;
-            string stringType = type == TwoFactorType.Email ? "Steam Guard (Email)" : "Two-Factor Authentication (Authenticator)";
-            if (needsTwoFactor)
-            {
-                IsLoggedOn = false;
-                Logger?.Warning("This account is protected by {0}.", stringType);
-                NewCodeNeeded(type);
-
-                Logger?.Info("Disconnection from Steam will now happen. A reconnect will be attempted with the provided code...");
-                // It still would have disconnected, but to be sure that it does
-                SteamClient?.Disconnect();
-
+            const int reconnectDelay = 5000;
+            await Task.Delay(reconnectDelay);
+            if (SteamClient == null || SteamClient?.IsConnected == true)
                 return;
-            }
-            else if (callback.Result == EResult.InvalidLoginAuthCode)
+            Logger?.Info("Reconnecting to Steam...");
+            try
             {
-                IsLoggedOn = false;
-                Logger?.Warning("The {0} code provided was invalid or has expired. Please provide a new one.", !string.IsNullOrEmpty(AuthCode) ? "Steam Guard (Email)" : "Two-Factor Authentication (Authenticator)");
-                NewCodeNeeded(type);
-
-                Logger?.Info("Disconnection from Steam will now happen. A reconnect will be attempted with the provided code...");
-                // It still would have disconnected, but to be sure that it does
-                SteamClient?.Disconnect();
-
-                return;
+                SteamClient?.Connect();
             }
+            catch (Exception ex)
+            {
+                Logger?.Error("An error occurred while reconnecting to Steam: {0}", ex);
+                if (ignoreAdditionalDelay)
+                    return;
+                Logger?.Error("The reconnection will be delayed by a minute");
+                await Task.Delay(60000 - reconnectDelay);
+            }
+        }
 
-            if (callback.Result != SteamKit2.EResult.OK)
+        private void LoggedOnCallback(SteamUser.LoggedOnCallback callback)
+        {
+            if (callback.Result != EResult.OK)
             {
                 IsLoggedOn = false;
                 Logger?.Error("Unable to logon to Steam: {0} / {1}", callback.Result, callback.ExtendedResult);
@@ -152,22 +145,7 @@ namespace FusionAPI
             Logger?.Info("Successfully logged in to Steam as {0}!", Username ?? "N/A");
         }
 
-        private void NewCodeNeeded(TwoFactorType type)
-        {
-            string stringType = type == TwoFactorType.Email ? "Steam Guard (Email)" : "Two-Factor Authentication (Authenticator)";
-            var code = TwoFactorRequired?.Invoke(type);
-            if (string.IsNullOrEmpty(code))
-            {
-                Logger?.Error("No {0} code provided, cannot log in.", stringType);
-                return;
-            }
-            if (type == TwoFactorType.Email)
-                AuthCode = code;
-            else
-                TwoFactorCode = code;
-        }
-
-        private void LoggedOffCallback(SteamKit2.SteamUser.LoggedOffCallback callback)
+        private void LoggedOffCallback(SteamUser.LoggedOffCallback callback)
         {
             IsLoggedOn = false;
             Logger?.Info("Logged off from Steam.");
@@ -197,17 +175,16 @@ namespace FusionAPI
             if (task != null)
                 lobbies = await task.ToTask().WaitAsync(CancellationToken.None);
 
-            if (lobbies != null && lobbies.Result == SteamKit2.EResult.OK)
+            if (lobbies != null && lobbies.Result == EResult.OK)
                 return [.. ProcessLobbies(lobbies.Lobbies)];
             return [];
         }
 
-        private List<IMatchmakingLobby> ProcessLobbies(List<SteamMatchmaking.Lobby> lobbies)
+        private List<IMatchmakingLobby> ProcessLobbies(List<Lobby> lobbies)
         {
             var list = new List<IMatchmakingLobby>();
             lobbies.ForEach(lobby => list.Add(new SteamKitLobby(lobby, SteamClient)));
             return list;
-
         }
 
         public bool IsFriend(ulong id)
@@ -224,14 +201,24 @@ namespace FusionAPI
             if (SteamClient?.IsConnected == true)
                 SteamClient.Disconnect();
 
-            Logger.Info("Connecting to Steam...");
-            SteamClient?.Connect();
+            try
+            {
+                Logger.Info("Connecting to Steam...");
+                SteamClient?.Connect();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("An error occurred while connecting to Steam: {0}", ex);
+                Logger.Error("A reconnection attempt will be made in 30 seconds...");
+                await Task.Delay(30000);
+                while (!IsInitialized)
+                    await ReconnectAsync(false);
+            }
             while (!IsInitialized)
                 await Task.Delay(250);
-
         }
 
-        internal class SteamKitLobby(SteamMatchmaking.Lobby lobby, SteamClient? client) : IMatchmakingLobby
+        internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby
         {
             public ulong Owner => lobby?.OwnerSteamID?.ConvertToUInt64() ?? 0;
 
@@ -265,19 +252,19 @@ namespace FusionAPI
 
     public class CustomUserAuth(Func<Task<bool>> acceptDeviceConfirmation, Func<bool, Task<string>> getDeviceCode, Func<string, bool, Task<string>> getEmailCode) : IAuthenticator
     {
-        private Func<Task<bool>> _acceptDeviceConfirmation { get; } = acceptDeviceConfirmation;
+        private Func<Task<bool>> AcceptDeviceConfirmation { get; } = acceptDeviceConfirmation;
 
-        private Func<bool, Task<string>> _getDeviceCode { get; } = getDeviceCode;
+        private Func<bool, Task<string>> GetDeviceCode { get; } = getDeviceCode;
 
-        private Func<string, bool, Task<string>> _getEmailCode { get; } = getEmailCode;
+        private Func<string, bool, Task<string>> GetEmailCode { get; } = getEmailCode;
 
         public async Task<bool> AcceptDeviceConfirmationAsync()
-            => await _acceptDeviceConfirmation.Invoke();
+            => await AcceptDeviceConfirmation.Invoke();
 
         public async Task<string> GetDeviceCodeAsync(bool previousCodeWasIncorrect)
-            => await _getDeviceCode.Invoke(previousCodeWasIncorrect);
+            => await GetDeviceCode.Invoke(previousCodeWasIncorrect);
 
         public async Task<string> GetEmailCodeAsync(string email, bool previousCodeWasIncorrect)
-            => await _getEmailCode.Invoke(email, previousCodeWasIncorrect);
+            => await GetEmailCode.Invoke(email, previousCodeWasIncorrect);
     }
 }

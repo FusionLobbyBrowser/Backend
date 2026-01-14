@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace FLB_API
+namespace FLB_API.Managers
 {
     public static class ModIOManager
     {
