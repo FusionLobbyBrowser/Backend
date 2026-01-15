@@ -245,24 +245,31 @@ namespace FLB_API
         private static async Task GetLobbies(CancellationToken token)
         {
             LoadSettings();
-            while (FusionClient != null && FusionClient.Handler?.IsInitialized == true && !token.IsCancellationRequested)
+            while (!token.IsCancellationRequested)
             {
-                try
+                if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
                 {
-                    Logger?.Information("Fetching lobbies...");
-                    var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
-                    int players = 0;
-                    foreach (var lobby in lobbies)
-                        players += lobby.PlayerCount;
-                    PlayerCount = new(players, lobbies.Length);
-                    Date = DateTime.UtcNow;
-                    Lobbies = lobbies;
-                    Logger?.Information($"Successfully fetched lobbies ({lobbies.Length})...");
-                    LoadSettings();
+                    try
+                    {
+                        Logger?.Information("Fetching lobbies...");
+                        var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+                        int players = 0;
+                        foreach (var lobby in lobbies)
+                            players += lobby.PlayerCount;
+                        PlayerCount = new(players, lobbies.Length);
+                        Date = DateTime.UtcNow;
+                        Lobbies = lobbies;
+                        Logger?.Information($"Successfully fetched lobbies ({lobbies.Length})...");
+                        LoadSettings();
+                    }
+                    catch (Exception e)
+                    {
+                        Logger?.Error(e, "Failed to fetch LabFusion lobbies.");
+                    }
                 }
-                catch (Exception e)
+                else
                 {
-                    Logger?.Error(e, "Failed to fetch LabFusion lobbies.");
+                    Logger?.Warning("Fusion Client is not initialized, skipping lobby fetch...");
                 }
                 await Task.Delay((Settings?.Interval ?? 30) * 1000, token);
             }
