@@ -291,6 +291,7 @@ namespace FLB_API
                 try
                 {
                     Logger?.Information("Using IMAP to fetch Steam Auth Code...");
+                    await Task.Delay((int)3.5f * 1000); // Wait for email to arrive, to avoid excessive requests
                     ImapManager ??= new IMAPManager(
                         Settings!.IMAP!.Host!,
                         Settings.IMAP.Port,
