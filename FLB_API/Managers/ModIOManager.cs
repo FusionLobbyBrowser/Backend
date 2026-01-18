@@ -4,7 +4,6 @@ namespace FLB_API.Managers
 {
     public static class ModIOManager
     {
-
         private const long ExpireTime = 30 * 60;
 
         private const string FileFormat = "{mod_id}-{expire_time}-{maturity}.png";
@@ -14,7 +13,6 @@ namespace FLB_API.Managers
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
             Program.Logger?.Information($"Remotely fetching mod thumbnail for {modId}");
-
 
             if (string.IsNullOrWhiteSpace(Program.Settings?.ModIO_Token) || Program.Settings.ModIO_Token == "your-token")
             {
@@ -32,6 +30,7 @@ namespace FLB_API.Managers
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
             bool maturity = json.GetProperty("maturity_option").GetInt16() == 8;
             string? thumbnail = null;
+
             if (json.TryGetProperty("logo", out var logoElement))
                 thumbnail = logoElement.GetProperty("thumb_320x180").GetString();
 
@@ -39,8 +38,6 @@ namespace FLB_API.Managers
                 return null;
             else
                 return new RemoteThumbnailResponse(modId, thumbnail, maturity);
-
-
         }
 
         public static async Task<LocalThumbnailResponse?> GetModThumbnail(long modId)
@@ -119,11 +116,9 @@ namespace FLB_API.Managers
                 var path = await CacheModThumbnail(remoteThumbnail);
                 if (path is not null)
                     return new LocalThumbnailResponse(modId, path, remoteThumbnail.IsNSFW);
-
             }
             return null;
         }
-
 
         private static async Task<string> CacheModThumbnail(RemoteThumbnailResponse thumbnailResponse)
         {
@@ -143,7 +138,6 @@ namespace FLB_API.Managers
 
             await DownloadFile(thumbnailResponse.ThumbnailUrl, path);
             return path;
-
         }
 
         private static string FormatFileName(long modId, long expireTime, bool isNSFW)

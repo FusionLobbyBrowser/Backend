@@ -1,4 +1,3 @@
-using System.Reflection.Emit;
 using System.Text.Json;
 
 using FLB_API.Managers;
@@ -199,10 +198,10 @@ namespace FLB_API
                 .Title("Logger level for the service responsible for connecting to:")
                 .AddChoices(
                 [
-                        FusionAPI.Interfaces.ILogger.LogLevel.Trace,
-                        FusionAPI.Interfaces.ILogger.LogLevel.Info,
-                        FusionAPI.Interfaces.ILogger.LogLevel.Warning,
-                        FusionAPI.Interfaces.ILogger.LogLevel.Error
+                    FusionAPI.Interfaces.ILogger.LogLevel.Trace,
+                    FusionAPI.Interfaces.ILogger.LogLevel.Info,
+                    FusionAPI.Interfaces.ILogger.LogLevel.Warning,
+                    FusionAPI.Interfaces.ILogger.LogLevel.Error
                 ])
                 );
             Logger?.Information("Selected log level: " + level.ToString());
@@ -212,7 +211,7 @@ namespace FLB_API
                 .AddChoices(
                 [
                     "Steamworks (no auth, requires steam client open)",
-                        "SteamKit (requires auth, steam client not required)"
+                    "SteamKit (requires auth, steam client not required)"
                 ]));
 #pragma warning restore S3878
 #pragma warning restore IDE0079
