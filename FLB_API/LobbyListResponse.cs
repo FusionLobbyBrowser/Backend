@@ -9,7 +9,7 @@ namespace FLB_API
     {
         public LobbyInfo[] Lobbies { get; set; } = lobbies;
 
-        public DateTime Date { get; set; } = date;
+        public long Date { get; set; } = ((DateTimeOffset)date).ToUnixTimeSeconds();
 
         public PlayerCount PlayerCount { get; set; } = count;
 
