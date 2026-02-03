@@ -8,7 +8,7 @@ namespace FLB_API.Managers
 
         private const string FileFormat = "{mod_id}-{expire_time}-{maturity}.png";
 
-        private static readonly List<long> Processing = [];
+        private static readonly Dictionary<long, long> Processing = [];
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
@@ -42,14 +42,23 @@ namespace FLB_API.Managers
 
         public static async Task<LocalThumbnailResponse?> GetModThumbnail(long modId)
         {
-            if (Processing.Contains(modId))
+            if (Processing.ContainsKey(modId))
             {
                 Program.Logger?.Information($"Mod thumbnail for {modId} is already being processed. Waiting...");
-                while (Processing.Contains(modId))
+                while (Processing.TryGetValue(modId, out long date))
+                {
+                    if (DateTimeOffset.Now.ToUnixTimeSeconds() - date > 60)
+                    {
+                        Program.Logger?.Warning($"Mod thumbnail for {modId} processing timed out. Continuing...");
+                        Processing.Remove(modId);
+                        break;
+                    }
                     await Task.Delay(500);
+                }
             }
 
-            Processing.Add(modId);
+            if (!Processing.ContainsKey(modId))
+                Processing.Add(modId, DateTimeOffset.Now.ToUnixTimeSeconds());
             try
             {
                 Program.Logger?.Information($"Getting mod thumbnail for {modId}");
