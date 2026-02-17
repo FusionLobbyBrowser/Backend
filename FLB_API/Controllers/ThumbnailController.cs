@@ -29,7 +29,7 @@ namespace FLB_API.Controllers
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, "Error fetching thumbnail for" + modId);
+                Program.Logger?.Error(ex, $"Error fetching thumbnail for {modId}");
                 return StatusCode(500, "An error occurred while fetching the thumbnail");
             }
 
