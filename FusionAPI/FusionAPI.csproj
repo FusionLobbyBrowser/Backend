@@ -1,9 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<DefineConstants>EOS_PLATFORM_WINDOWS_64</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -17,13 +19,13 @@
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="Dependencies\libraries\EOSSDK-Win64-Shipping.dll">
-		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Dependencies\EOSSDK\" />
-	  <Folder Include="Dependencies\libraries\" />
+		<Folder Include="Dependencies\EOSSDK\" />
+		<Folder Include="Dependencies\libraries\" />
 	</ItemGroup>
 
 </Project>

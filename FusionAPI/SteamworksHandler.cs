@@ -67,8 +67,8 @@ namespace FusionAPI
         private void SteamworksError(Exception ex)
             => Logger?.Error("Steamworks Exception: {0}", ex);
 
-        public bool IsFriend(ulong id)
-            => SteamFriends.GetFriends().Any(f => f.Id == id);
+        public bool IsFriend(string id)
+            => ulong.TryParse(id, out ulong res) && SteamFriends.GetFriends().Any(f => f.Id == res);
     }
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby

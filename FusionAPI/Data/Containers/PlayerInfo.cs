@@ -8,7 +8,7 @@ namespace FusionAPI.Data.Containers;
 public class PlayerInfo()
 {
     [JsonPropertyName("platformID")]
-    public ulong PlatformID { get; set; }
+    public string PlatformID { get; set; }
 
     [JsonPropertyName("username")]
     public string? Username { get; set; }

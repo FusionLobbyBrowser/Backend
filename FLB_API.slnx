@@ -4,7 +4,9 @@
     <BuildType Name="EOS_PLATFORM_WINDOWS_64" />
     <BuildType Name="Release" />
   </Configurations>
-  <Project Path="FLB_API/FLB_API.csproj" />
+  <Project Path="FLB_API/FLB_API.csproj">
+    <BuildType Solution="EOS_PLATFORM_WINDOWS_64|*" Project="Release" />
+  </Project>
   <Project Path="FusionAPI/FusionAPI.csproj">
     <BuildType Solution="EOS_PLATFORM_WINDOWS_64|*" Project="Release" />
   </Project>

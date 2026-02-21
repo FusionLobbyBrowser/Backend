@@ -187,8 +187,8 @@ namespace FusionAPI
             return list;
         }
 
-        public bool IsFriend(ulong id)
-            => FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == id) == true;
+        public bool IsFriend(string id)
+            => ulong.TryParse(id, out ulong res) && FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == res) == true;
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
