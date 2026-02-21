@@ -3,11 +3,11 @@ using FusionAPI.Interfaces;
 
 namespace FusionAPI
 {
-    public class Fusion(ISteamHandler handler)
+    public class Fusion(IMatchmakingHandler handler)
     {
         public const uint AppID = 250820;
 
-        public ISteamHandler Handler { get; set; } = handler;
+        public IMatchmakingHandler Handler { get; set; } = handler;
 
         public async Task Initialize(ILogger logger, Dictionary<string, string> metadata)
         {
@@ -62,7 +62,6 @@ namespace FusionAPI
             })];
         }
 
-
         public bool IsPrivate(LobbyInfo? lobby)
         {
             if (lobby == null)
@@ -79,6 +78,5 @@ namespace FusionAPI
 
             return false;
         }
-
     }
 }

@@ -6,7 +6,7 @@ using Steamworks.Data;
 
 namespace FusionAPI
 {
-    public class SteamworksHandler : ISteamHandler
+    public class SteamworksHandler : IMatchmakingHandler
     {
         public bool IsInitialized => SteamClient.IsValid;
 

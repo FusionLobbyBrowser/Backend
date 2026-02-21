@@ -1,8 +1,6 @@
-﻿using Steamworks.Data;
-
-namespace FusionAPI.Interfaces
+﻿namespace FusionAPI.Interfaces
 {
-    public interface ISteamHandler
+    public interface IMatchmakingHandler
     {
         public bool IsInitialized { get; }
 

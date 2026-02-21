@@ -9,7 +9,7 @@ using static SteamKit2.SteamMatchmaking.Lobby;
 
 namespace FusionAPI
 {
-    public class SteamKitHandler : ISteamHandler
+    public class SteamKitHandler : IMatchmakingHandler
     {
         public SteamClient? SteamClient { get; }
 
