@@ -16,6 +16,14 @@
 		<None Update="C:\Users\HAHOOS\.nuget\packages\facepunch.steamworks.library\2.3.3\build\..\build\x64\steam_api64.dll">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
+		<None Update="Dependencies\libraries\EOSSDK-Win64-Shipping.dll">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Dependencies\EOSSDK\" />
+	  <Folder Include="Dependencies\libraries\" />
 	</ItemGroup>
 
 </Project>
