@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace FLB_API.Managers
 {
@@ -7,8 +8,6 @@ namespace FLB_API.Managers
         private const long ExpireTime = 30 * 60;
 
         private const string FileFormat = "{mod_id}-{expire_time}-{maturity}.png";
-
-        private static readonly List<long> Processing = [];
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
@@ -42,14 +41,6 @@ namespace FLB_API.Managers
 
         public static async Task<LocalThumbnailResponse?> GetModThumbnail(long modId)
         {
-            if (Processing.Contains(modId))
-            {
-                Program.Logger?.Information($"Mod thumbnail for {modId} is already being processed. Waiting...");
-                while (Processing.Contains(modId))
-                    await Task.Delay(500);
-            }
-
-            Processing.Add(modId);
             try
             {
                 Program.Logger?.Information($"Getting mod thumbnail for {modId}");
@@ -65,6 +56,24 @@ namespace FLB_API.Managers
                 else
                     Program.Logger?.Information($"Found cached mod thumbnail for {modId}");
 
+                if (files.Length > 1)
+                {
+                    Program.Logger?.Information($"Found duplicate cached thumbnails (Count: {files.Length}) for {modId}, removing...");
+                    var sortedFiles = files.AsEnumerable().OrderByDescending(x => GetExpireFromName(Path.GetFileNameWithoutExtension(x.FullName)));
+                    foreach (var _file in sortedFiles.Skip(1).Select(x => x.FullName))
+                    {
+                        try
+                        {
+                            File.Delete(_file);
+                            Program.Logger?.Information($"Deleted duplicate cached thumbnail: {_file}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Program.Logger?.Error(ex, $"Error deleting duplicate cached thumbnail: {_file}");
+                        }
+                    }
+                }
+
                 var file = files.FirstOrDefault();
                 var info = GetInfo(modId, file?.Name);
                 return info ?? await CacheRemote(modId);
@@ -74,7 +83,6 @@ namespace FLB_API.Managers
                 Program.Logger?.Error(ex, $"Error getting mod thumbnail for {modId}");
                 return null;
             }
-            finally { Processing.Remove(modId); }
         }
 
         private static LocalThumbnailResponse? GetInfo(long modId, string? name)
@@ -106,6 +114,18 @@ namespace FLB_API.Managers
                 }
             }
             return null;
+        }
+
+        private static long GetExpireFromName(string name)
+        {
+            var parts = name.Split('-');
+            if (parts.Length != 3)
+                return -1;
+
+            if (long.TryParse(parts[1], out long expireTime))
+                return expireTime;
+
+            return -1;
         }
 
         private static async Task<LocalThumbnailResponse?> CacheRemote(long modId)
