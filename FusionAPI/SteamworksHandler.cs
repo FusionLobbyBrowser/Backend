@@ -34,6 +34,7 @@ namespace FusionAPI
             list.FilterDistanceWorldwide();
             list.WithMaxResults(int.MaxValue);
             list.WithSlotsAvailable(int.MaxValue);
+
             list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
@@ -73,7 +74,7 @@ namespace FusionAPI
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby
     {
-        public ulong Owner => lobby.Owner.Id;
+        public string Owner => lobby.Owner.Id.ToString();
 
         public bool IsOwnerMe => lobby.Owner.IsMe;
 

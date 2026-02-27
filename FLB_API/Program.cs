@@ -16,13 +16,15 @@ namespace FLB_API
     {
         public static Fusion? FusionClient { get; private set; }
 
+        public static Fusion? EOSClient { get; private set; }
+
         internal static Serilog.Core.Logger? Logger { get; private set; }
 
-        internal static LobbyInfo[]? Lobbies { get; private set; }
+        internal static LobbyInfo[]? SteamLobbies { get; private set; }
+
+        internal static LobbyInfo[]? EOSLobbies { get; private set; }
 
         internal static DateTime Date { get; private set; } = DateTime.UtcNow;
-
-        internal static PlayerCount? PlayerCount { get; private set; }
 
         internal static DateTime Uptime { get; private set; }
 
@@ -107,7 +109,10 @@ namespace FLB_API
 
                 var logger = new Logger(level);
                 await FusionClient.Initialize(logger, metadata);
-                Logger?.Information("Successfully initialized Fusion API");
+                Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
+                EOSClient = new Fusion(new EOSHandler());
+                await EOSClient.Initialize(logger, []);
+                Logger?.Information("Successfully initialized EOS API");
                 Uptime = DateTime.UtcNow;
             }
             catch (Exception e)
@@ -250,15 +255,24 @@ namespace FLB_API
                 {
                     try
                     {
-                        Logger?.Information("Fetching lobbies...");
+                        Logger?.Information("Fetching Steam lobbies...");
                         var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
                         int players = 0;
                         foreach (var lobby in lobbies)
                             players += lobby.PlayerCount;
-                        PlayerCount = new(players, lobbies.Length);
                         Date = DateTime.UtcNow;
-                        Lobbies = lobbies;
-                        Logger?.Information($"Successfully fetched lobbies ({lobbies.Length})...");
+                        SteamLobbies = lobbies;
+
+                        Logger?.Information($"Successfully fetched Steam lobbies ({lobbies.Length})...");
+
+                        Logger?.Information("Fetching EOS lobbies...");
+                        var eLobbies = await EOSClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+                        int ePlayers = 0;
+                        foreach (var lobby in eLobbies)
+                            ePlayers += lobby.PlayerCount;
+                        EOSLobbies = eLobbies;
+
+                        Logger?.Information($"Successfully fetched EOS lobbies ({eLobbies.Length})...");
                         LoadSettings();
                     }
                     catch (Exception e)

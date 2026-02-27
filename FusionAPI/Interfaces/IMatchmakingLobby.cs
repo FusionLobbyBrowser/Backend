@@ -8,7 +8,7 @@ namespace FusionAPI.Interfaces
 {
     public interface IMatchmakingLobby
     {
-        public ulong Owner { get; }
+        public string Owner { get; }
 
         public bool IsOwnerMe { get; }
 

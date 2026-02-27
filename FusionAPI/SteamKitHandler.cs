@@ -220,7 +220,7 @@ namespace FusionAPI
 
         internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby
         {
-            public ulong Owner => lobby?.OwnerSteamID?.ConvertToUInt64() ?? 0;
+            public string Owner => lobby?.OwnerSteamID?.ToString() ?? "0";
 
             public bool IsOwnerMe => client?.SteamID == lobby.OwnerSteamID;
 
