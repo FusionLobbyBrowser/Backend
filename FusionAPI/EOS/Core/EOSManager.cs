@@ -8,6 +8,8 @@ using Epic.OnlineServices.Platform;
 using FusionAPI.EOS.Auth;
 using FusionAPI.Interfaces;
 
+using System.Timers;
+
 namespace FusionAPI.EOS.Core;
 
 /// <summary>
@@ -21,6 +23,8 @@ public class EOSManager
     private bool _isInitialized;
 
     public bool IsInitialized => _isInitialized;
+
+    private System.Timers.Timer _tickTimer;
 
     private ILogger Logger { get; }
 
@@ -80,6 +84,7 @@ public class EOSManager
     public void Shutdown()
     {
         _isInitialized = false;
+        _tickTimer?.Dispose();
         EOSInterfaces.Shutdown();
     }
 
@@ -147,26 +152,25 @@ public class EOSManager
 
     private void TickerTask()
     {
-        Stopwatch _tickStopwatch = Stopwatch.StartNew();
-        while (EOSInterfaces.IsInitialized)
+        _tickTimer = new()
         {
-            if (!_tickStopwatch.IsRunning)
-                _tickStopwatch.Start();
+            Interval = TickInterval * 1000,
 
-            if ((_tickStopwatch.ElapsedMilliseconds / 1000) >= TickInterval)
-            {
-                _tickStopwatch.Reset();
+            AutoReset = true
+        };
+        _tickTimer.Elapsed += (sender, e) => TickerCallback();
+        _tickTimer.Start();
+    }
 
-                try
-                {
-                    Logger.Info("tick");
-                    EOSInterfaces.Platform?.Tick();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error("ticking EOS platform", ex);
-                }
-            }
+    private void TickerCallback()
+    {
+        try
+        {
+            EOSInterfaces.Platform?.Tick();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ticking EOS platform", ex);
         }
     }
 }
