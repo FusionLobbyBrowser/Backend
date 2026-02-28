@@ -4,8 +4,6 @@ using Epic.OnlineServices.Connect;
 using FusionAPI.EOS.Core;
 using FusionAPI.Interfaces;
 
-using System.Collections;
-
 namespace FusionAPI.EOS.Auth;
 
 /// <summary>
@@ -18,14 +16,13 @@ public class EOSDeviceIdAuth
     public EOSDeviceIdAuth(ILogger logger)
         => Logger = logger;
 
-    public IEnumerator CreateDeviceIdAsync(Action<bool> onComplete)
+    public async Task<bool> CreateDeviceIdAsync()
     {
         var connect = EOSInterfaces.Connect;
         if (connect == null)
         {
             Logger.Error("ConnectInterface is null when creating device ID");
-            onComplete?.Invoke(false);
-            yield break;
+            return false;
         }
 
         bool finished = false;
@@ -45,14 +42,18 @@ public class EOSDeviceIdAuth
             {
                 Logger.Error($"CreateDeviceId failed: {data.ResultCode}");
             }
+            else
+            {
+                Logger.Trace("CreateDeviceId succeeded");
+            }
 
             finished = true;
         });
 
         while (!finished)
-            yield return null;
+            await Task.Yield();
 
-        onComplete?.Invoke(success);
+        return success;
     }
 
     private static string GetDeviceModel()

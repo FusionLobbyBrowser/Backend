@@ -1,11 +1,12 @@
-﻿using Epic.OnlineServices;
+﻿using System.Collections;
+using System.Diagnostics;
+
+using Epic.OnlineServices;
 using Epic.OnlineServices.Logging;
 using Epic.OnlineServices.Platform;
 
 using FusionAPI.EOS.Auth;
 using FusionAPI.Interfaces;
-
-using System.Collections;
 
 namespace FusionAPI.EOS.Core;
 
@@ -29,56 +30,51 @@ public class EOSManager
         Logger = logger;
     }
 
-    public IEnumerator InitializeAsync(Action<bool> onComplete)
+    public async Task<bool> InitializeAsync()
     {
+        Logger.Info("Initializing EOS Manager...");
         if (_isInitialized)
         {
             Logger.Warning("EOS is already initialized");
-            onComplete?.Invoke(true);
-            yield break;
+            return true;
         }
 
         if (!InitializePlatform())
         {
-            onComplete?.Invoke(false);
-            yield break;
+            Logger.Error("Failed to initialize EOS Platform");
+            return true;
         }
 
         if (!InitializeInterfaces())
         {
+            Logger.Error("Failed to initialize EOS Interfaces");
             Shutdown();
-            onComplete?.Invoke(false);
-            yield break;
+            return false;
         }
 
 #if DEBUG
         ConfigureLogging();
 #endif
 
-        _ = TickerTask();
+        while (!EOSInterfaces.IsInitialized)
+            await Task.Yield();
 
-        // Perform login
-        bool loginComplete = false;
-        bool loginSuccess = false;
+        TickerTask();
 
-        yield return _authManager.LoginAsync(success =>
-        {
-            loginSuccess = success;
-            loginComplete = true;
-        });
+        Logger.Info("Logging into EOS...");
 
-        while (!loginComplete)
-            yield return null;
+        var loginSuccess = await _authManager.LoginAsync();
+
+        Logger.Info($"Login complete. Success: {loginSuccess}");
 
         if (!loginSuccess)
         {
             Shutdown();
-            onComplete?.Invoke(false);
-            yield break;
+            return false;
         }
 
         _isInitialized = true;
-        onComplete?.Invoke(true);
+        return true;
     }
 
     public void Shutdown()
@@ -89,6 +85,7 @@ public class EOSManager
 
     private bool InitializePlatform()
     {
+        Logger.Info("Initializing EOS Platform...");
         var initializeOptions = new InitializeOptions
         {
             ProductName = EOSCredentials.ProductName,
@@ -108,6 +105,7 @@ public class EOSManager
 
     private bool InitializeInterfaces()
     {
+        Logger.Info("Initializing EOS Interfaces...");
         var options = new Options
         {
             ProductId = EOSCredentials.ProductId,
@@ -142,24 +140,33 @@ public class EOSManager
 
     private void ConfigureLogging()
     {
+        Logger.Info("Configuring EOS logging...");
         LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Off);
-        LoggingInterface.SetCallback((ref LogMessage message) => Logger.Info($"[EOS] {message.Message}"));
+        LoggingInterface.SetCallback((ref message) => Logger.Info($"[EOS] {message.Message}"));
     }
 
-    private async Task TickerTask()
+    private void TickerTask()
     {
+        Stopwatch _tickStopwatch = Stopwatch.StartNew();
         while (EOSInterfaces.IsInitialized)
         {
-            try
-            {
-                EOSInterfaces.Platform?.Tick();
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("ticking EOS platform", ex);
-            }
+            if (!_tickStopwatch.IsRunning)
+                _tickStopwatch.Start();
 
-            await Task.Delay((int)TickInterval * 1000);
+            if ((_tickStopwatch.ElapsedMilliseconds / 1000) >= TickInterval)
+            {
+                _tickStopwatch.Reset();
+
+                try
+                {
+                    Logger.Info("tick");
+                    EOSInterfaces.Platform?.Tick();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("ticking EOS platform", ex);
+                }
+            }
         }
     }
 }

@@ -27,38 +27,36 @@ public class EOSAuthManager
         Logger = logger;
     }
 
-    public IEnumerator LoginAsync(Action<bool> onComplete)
+    public async Task<bool> LoginAsync()
     {
+        Logger.Info("Logging in...");
         // Step 1: Create device ID
-        bool deviceIdSuccess = false;
-
-        yield return _deviceIdAuth.CreateDeviceIdAsync(success => deviceIdSuccess = success);
+        bool deviceIdSuccess = await _deviceIdAuth.CreateDeviceIdAsync();
 
         if (!deviceIdSuccess)
         {
-            onComplete?.Invoke(false);
-            yield break;
+            Logger.Error("Failed to create device ID, cannot log in");
+            return false;
         }
 
         // Step 2: Login with device ID
-        bool loginSuccess = false;
 
-        yield return LoginWithDeviceIdAsync(success => loginSuccess = success);
+        var loginSuccess = await LoginWithDeviceIdAsync();
 
         if (loginSuccess)
             RegisterAuthExpiration();
 
-        onComplete?.Invoke(loginSuccess);
+        return loginSuccess;
     }
 
-    private IEnumerator LoginWithDeviceIdAsync(Action<bool> onComplete)
+    private async Task<bool> LoginWithDeviceIdAsync()
     {
+        Logger.Info("Logging in with device ID...");
         var connect = EOSInterfaces.Connect;
         if (connect == null)
         {
             Logger.Error("ConnectInterface is null when logging in");
-            onComplete?.Invoke(false);
-            yield break;
+            return false;
         }
 
         // Get username
@@ -107,32 +105,22 @@ public class EOSAuthManager
         });
 
         while (!finished && continuanceToken == null)
-            yield return null;
+            await Task.Yield();
 
         // Create user if needed
         if (continuanceToken != null)
-        {
-            yield return CreateUserAsync(continuanceToken, result =>
-            {
-                success = result;
-                finished = true;
-            });
-        }
+            success = await CreateUserAsync(continuanceToken);
 
-        while (!finished)
-            yield return null;
-
-        onComplete?.Invoke(success);
+        return success;
     }
 
-    private IEnumerator CreateUserAsync(ContinuanceToken token, Action<bool> onComplete)
+    private async Task<bool> CreateUserAsync(ContinuanceToken token)
     {
         var connect = EOSInterfaces.Connect;
         if (connect == null)
         {
             Logger.Error("ConnectInterface is null when creating user");
-            onComplete?.Invoke(false);
-            yield break;
+            return false;
         }
 
         bool finished = false;
@@ -159,9 +147,9 @@ public class EOSAuthManager
         });
 
         while (!finished)
-            yield return null;
+            await Task.Yield();
 
-        onComplete?.Invoke(success);
+        return success;
     }
 
     private void RegisterAuthExpiration()

@@ -1,6 +1,4 @@
-﻿using System.Collections;
-
-using Epic.OnlineServices;
+﻿using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
 
 using FusionAPI.EOS.Auth;
@@ -99,7 +97,7 @@ namespace FusionAPI
             });
 
             while (!finished)
-                await Task.Delay(50);
+                await Task.Yield();
 
             return [.. lobbies];
         }
@@ -118,7 +116,7 @@ namespace FusionAPI
             if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
                 return null;
 
-            var networkLobby = new EpicLobby(lobbyDetails, this, lobbyInfo.Value.LobbyId);
+            var networkLobby = new EpicLobby(lobbyDetails, this);
 
             // Validate server is open
             if (!networkLobby.TryGetData(LobbyKeys.HasLobbyOpenKey, out var hasServerOpen) ||
@@ -162,14 +160,11 @@ namespace FusionAPI
             AuthManager = new EOSAuthManager(logger);
             EOSManager = new EOSManager(AuthManager, logger);
 
-            bool finished = false;
-            EOSManager.InitializeAsync((x) =>
-            {
-                finished = true;
-                Logger.Info("EOS Initialized");
-            });
-            while (!finished)
-                await Task.Delay(50);
+            var success = await EOSManager.InitializeAsync();
+            if (success)
+                Logger.Info("EOS Initialized successfully.");
+            else
+                Logger.Error("Failed to initialize EOS.");
         }
 
         public bool IsFriend(string id)
@@ -180,26 +175,23 @@ namespace FusionAPI
     {
         public string Owner => GetOwner();
 
-        public bool IsOwnerMe => ((Utf8String)_eosHandler.AuthManager.LocalUserId) == Owner;
+        public bool IsOwnerMe => ((Utf8String)EOSHandler.AuthManager.LocalUserId) == Owner;
 
-        private LobbyDetails _details;
+        private LobbyDetails Details { get; }
 
-        private EOSHandler _eosHandler;
+        private EOSHandler EOSHandler { get; }
 
-        private string _lobbyId;
-
-        public EpicLobby(LobbyDetails details, EOSHandler handler, string lobbyId)
+        public EpicLobby(LobbyDetails details, EOSHandler handler)
         {
-            _details = details;
-            _eosHandler = handler;
-            _lobbyId = lobbyId;
+            Details = details;
+            EOSHandler = handler;
         }
 
         public bool TryGetData(string key, out string value)
         {
             value = string.Empty;
 
-            if (_details == null)
+            if (Details == null)
                 return false;
 
             var options = new LobbyDetailsCopyAttributeByKeyOptions
@@ -207,7 +199,7 @@ namespace FusionAPI
                 AttrKey = key
             };
 
-            var result = _details.CopyAttributeByKey(ref options, out var attribute);
+            var result = Details.CopyAttributeByKey(ref options, out var attribute);
 
             if (result == Result.Success && attribute.HasValue)
             {
@@ -227,7 +219,7 @@ namespace FusionAPI
         private string GetOwner()
         {
             var options = new LobbyDetailsGetLobbyOwnerOptions();
-            var id = _details?.GetLobbyOwner(ref options);
+            var id = Details?.GetLobbyOwner(ref options);
             if (id == null)
                 return string.Empty;
 
