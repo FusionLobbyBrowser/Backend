@@ -40,10 +40,7 @@ namespace FusionAPI
             SteamClient = new SteamClient();
             Matchmaking = SteamClient.GetHandler<SteamMatchmaking>();
 
-            SteamUser = SteamClient.GetHandler<SteamUser>();
-            if (SteamUser == null)
-                throw new InvalidOperationException("Failed to get SteamUser handler from SteamKit!");
-
+            SteamUser = SteamClient.GetHandler<SteamUser>() ?? throw new InvalidOperationException("Failed to get SteamUser handler from SteamKit!");
             CallbackManager = new CallbackManager(SteamClient);
             CallbackManager.Subscribe<SteamClient.ConnectedCallback>(ConnectedCallback);
             CallbackManager.Subscribe<SteamClient.DisconnectedCallback>(DisconnectedCallback);
