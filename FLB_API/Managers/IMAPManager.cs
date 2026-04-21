@@ -31,7 +31,7 @@ namespace FLB_API.Managers
         public async Task<string?> GetCodeAsync(float delay = 5, int maxTries = -1)
         {
             int tries = 0;
-            while (Client?.IsAuthenticated == true && Client.IsConnected)
+            while (Client?.IsAuthenticated == true && Client?.IsConnected == true && Client.Inbox != null)
             {
                 Logger?.Information("Checking inbox for email regarding the Steam Auth Code...");
                 await Client.Inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
@@ -62,7 +62,7 @@ namespace FLB_API.Managers
 
         private string? HandleMessage(MimeMessage message)
         {
-            if (message.Subject.StartsWith(Subject, StringComparison.OrdinalIgnoreCase))
+            if (message?.Subject?.StartsWith(Subject, StringComparison.OrdinalIgnoreCase) == true)
             {
                 Logger?.Information("Found an email containing the code! Extracting...");
                 return ExtractCode(message);
@@ -77,7 +77,7 @@ namespace FLB_API.Managers
                 var code = SteamAuthCode().Match(body.Text)?.Groups?["code"];
                 if (code?.Success == true)
                 {
-                    Logger?.Information("Successfully extracted the Steam Auth Code: {0}", code.Value);
+                    Logger?.Information("Extracted the Steam Auth Code: {0}", code.Value);
                     return code.Value;
                 }
             }
@@ -90,8 +90,8 @@ namespace FLB_API.Managers
                 return;
 
             Client.Authenticated += (_, e) => Logger?.Information("IMAP Authenticated");
-            Client.Connected += (_, e) => Logger?.Information("IMAP Connected");
-            Client.Disconnected += (_, e) => Logger?.Information("IMAP Disconnected");
+            Client.Connected += (_, e) => Logger?.Information("Connected to IMAP");
+            Client.Disconnected += (_, e) => Logger?.Information("Disconnected from IMAP");
         }
 
         [GeneratedRegex("Login Code\\n(?'code'.*)", RegexOptions.Multiline)]
