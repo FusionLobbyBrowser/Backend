@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using FusionAPI.Data.Enums;
 
@@ -11,6 +12,7 @@ public class LobbyInfo
 
     // Info
     [JsonPropertyName("lobbyID")]
+    [JsonConverter(typeof(NumberToStringConverter))]
     public string LobbyID { get; set; } = "0";
 
     [JsonPropertyName("lobbyCode")]
@@ -106,4 +108,24 @@ public class LobbyInfo
 
     [JsonPropertyName("teleportation")]
     public PermissionLevel Teleportation { get; set; } = PermissionLevel.DEFAULT;
+}
+
+public class NumberToStringConverter : JsonConverter<string>
+{
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return reader.GetString();
+
+        using var document = JsonDocument.ParseValue(ref reader);
+        return document.RootElement.ToString();
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value != null)
+            writer.WriteStringValue(value);
+        else
+            writer.WriteNullValue();
+    }
 }
