@@ -6,7 +6,7 @@ using Steamworks.Data;
 
 namespace FusionAPI
 {
-    public class SteamworksHandler : ISteamHandler
+    public class SteamworksHandler : IMatchmakingHandler
     {
         public bool IsInitialized => SteamClient.IsValid;
 
@@ -34,6 +34,7 @@ namespace FusionAPI
             list.FilterDistanceWorldwide();
             list.WithMaxResults(int.MaxValue);
             list.WithSlotsAvailable(int.MaxValue);
+
             list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
@@ -67,13 +68,13 @@ namespace FusionAPI
         private void SteamworksError(Exception ex)
             => Logger?.Error("Steamworks Exception: {0}", ex);
 
-        public bool IsFriend(ulong id)
-            => SteamFriends.GetFriends().Any(f => f.Id == id);
+        public bool IsFriend(string id)
+            => ulong.TryParse(id, out ulong res) && SteamFriends.GetFriends().Any(f => f.Id == res);
     }
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby
     {
-        public ulong Owner => lobby.Owner.Id;
+        public string Owner => lobby.Owner.Id.ToString();
 
         public bool IsOwnerMe => lobby.Owner.IsMe;
 

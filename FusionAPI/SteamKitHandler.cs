@@ -9,7 +9,7 @@ using static SteamKit2.SteamMatchmaking.Lobby;
 
 namespace FusionAPI
 {
-    public class SteamKitHandler : ISteamHandler
+    public class SteamKitHandler : IMatchmakingHandler
     {
         public SteamClient? SteamClient { get; }
 
@@ -34,6 +34,8 @@ namespace FusionAPI
         private ILogger? Logger;
 
         private string? previouslyStoredGuardData;
+
+        private long ReconnectTime { get; set; } = -1;
 
         public SteamKitHandler()
         {
@@ -96,6 +98,20 @@ namespace FusionAPI
                     ShouldRememberPassword = true,
                 });
             }
+            catch (AuthenticationException ex)
+            {
+                if (ex.Result == EResult.RateLimitExceeded)
+                {
+                    Logger?.Error("Authentication failed due to rate limit, retrying after 5 mins");
+                }
+                else
+                {
+                    ReconnectTime = DateTimeOffset.Now.AddMinutes(5).ToUnixTimeMilliseconds();
+                    Logger?.Error("Authentication failed: {0}", ex);
+                }
+
+                SteamClient?.Disconnect();
+            }
             catch (Exception ex)
             {
                 Logger?.Error("An error occurred during Steam authentication: {0}", ex);
@@ -112,7 +128,15 @@ namespace FusionAPI
         private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
         {
             const int reconnectDelay = 5000;
-            await Task.Delay(reconnectDelay);
+            if (ReconnectTime > 0)
+            {
+                await Task.Delay(reconnectDelay);
+            }
+            else
+            {
+                while (ReconnectTime > 0 && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < ReconnectTime)
+                    await Task.Delay(50);
+            }
             if (SteamClient == null || SteamClient?.IsConnected == true)
                 return;
             Logger?.Info("Reconnecting to Steam...");
@@ -184,8 +208,8 @@ namespace FusionAPI
             return list;
         }
 
-        public bool IsFriend(ulong id)
-            => FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == id) == true;
+        public bool IsFriend(string id)
+            => ulong.TryParse(id, out ulong res) && FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == res) == true;
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
@@ -217,7 +241,7 @@ namespace FusionAPI
 
         internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby
         {
-            public ulong Owner => lobby?.OwnerSteamID?.ConvertToUInt64() ?? 0;
+            public string Owner => lobby?.OwnerSteamID?.ToString() ?? "0";
 
             public bool IsOwnerMe => client?.SteamID == lobby.OwnerSteamID;
 

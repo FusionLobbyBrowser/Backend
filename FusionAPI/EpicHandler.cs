@@ -1,0 +1,234 @@
+using Epic.OnlineServices;
+using Epic.OnlineServices.Lobby;
+
+using FusionAPI.EOS.Auth;
+using FusionAPI.EOS.Core;
+using FusionAPI.Epic;
+using FusionAPI.Interfaces;
+
+namespace FusionAPI
+{
+    public class EOSHandler : IMatchmakingHandler
+    {
+        public bool IsInitialized => EOSManager?.IsInitialized ?? false;
+
+        internal EOSManager EOSManager { get; private set; }
+
+        internal EOSAuthManager AuthManager { get; private set; }
+
+        public ILogger Logger { get; private set; }
+
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
+        {
+            var options = new CreateLobbySearchOptions
+            {
+                MaxResults = 200
+            };
+
+            LobbySearch searchHandle = null;
+
+            var res = EOSInterfaces.Lobby?.CreateLobbySearch(ref options, out searchHandle);
+
+            if (res != Result.Success)
+            {
+                Logger.Error($"Failed to create lobby search handle: {res}");
+                return [];
+            }
+
+            var identifierParam = new LobbySearchSetParameterOptions
+            {
+                Parameter = new AttributeData
+                {
+                    Key = LobbyKeys.IdentifierKey,
+                    Value = bool.TrueString,
+                },
+                ComparisonOp = ComparisonOp.Equal,
+            };
+            searchHandle.SetParameter(ref identifierParam);
+
+            if (searchHandle == null)
+            {
+                Logger.Error("LobbySearch handle is null after creation");
+                return [];
+            }
+
+            var findOptions = new LobbySearchFindOptions
+            {
+                LocalUserId = AuthManager.LocalUserId
+            };
+
+            var tcs = new TaskCompletionSource<IMatchmakingLobby[]>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            searchHandle.Find(ref findOptions, null, (ref LobbySearchFindCallbackInfo info) =>
+            {
+                if (info.ResultCode != Result.Success)
+                {
+                    Logger.Error($"Failed to find lobbies: {info.ResultCode}");
+                    tcs.SetResult([]);
+                    return;
+                }
+
+                var countOptions = new LobbySearchGetSearchResultCountOptions();
+                var lobbyCount = searchHandle.GetSearchResultCount(ref countOptions);
+
+                if (lobbyCount == 0)
+                {
+                    Logger.Trace("No lobbies found.");
+                    tcs.SetResult([]);
+                    return;
+                }
+
+                var lobbyDetailsToProcess = new List<LobbyDetails>((int)lobbyCount);
+
+                for (uint i = 0; i < lobbyCount; i++)
+                {
+                    var copyOptions = new LobbySearchCopySearchResultByIndexOptions
+                    {
+                        LobbyIndex = i
+                    };
+
+                    if (searchHandle.CopySearchResultByIndex(ref copyOptions, out var lobbyDetails) == Result.Success
+                        && lobbyDetails != null)
+                    {
+                        lobbyDetailsToProcess.Add(lobbyDetails);
+                    }
+                }
+
+                var lobbies = new List<IMatchmakingLobby>(lobbyDetailsToProcess.Count);
+
+                foreach (var lobbyDetails in lobbyDetailsToProcess)
+                {
+                    var lobby = ProcessSingleLobby(lobbyDetails);
+                    if (lobby != null)
+                        lobbies.Add(lobby);
+                    else
+                        lobbyDetails.Release();
+                }
+
+                tcs.SetResult([.. lobbies]);
+            });
+
+            return await tcs.Task;
+        }
+
+        private IMatchmakingLobby? ProcessSingleLobby(LobbyDetails lobbyDetails)
+        {
+            var ownerOptions = new LobbyDetailsGetLobbyOwnerOptions();
+            var ownerId = lobbyDetails.GetLobbyOwner(ref ownerOptions);
+
+            if (ownerId == null)
+                return null;
+
+            var infoOptions = new LobbyDetailsCopyInfoOptions();
+            if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
+                return null;
+
+            var networkLobby = new EpicLobby(lobbyDetails, this);
+
+            if (!networkLobby.TryGetData(LobbyKeys.HasLobbyOpenKey, out var hasServerOpen) ||
+                hasServerOpen != bool.TrueString)
+                return null;
+
+            var metadata = ReadMetadata(networkLobby);
+
+            if (metadata == null)
+                return null;
+
+            if (!metadata.HasLobbyOpen)
+                return null;
+
+            return networkLobby;
+        }
+
+        private LobbyMetadataInfo? ReadMetadata(IMatchmakingLobby lobby)
+        {
+            try
+            {
+                return LobbyMetadataInfo.Read(lobby);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Failed to read lobby metadata", ex);
+                return null;
+            }
+        }
+
+        public async Task Init(ILogger logger, Dictionary<string, string> metadata)
+        {
+            Logger = logger;
+
+            var eosSDKPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dependencies", "EOSSDK-Win64-Shipping.dll");
+            DllTools.LoadLibrary(eosSDKPath);
+
+            AuthManager = new EOSAuthManager(logger);
+            EOSManager = new EOSManager(AuthManager, logger);
+
+            bool success = await EOSManager.InitializeAsync();
+
+            if (success)
+                Logger.Info("EOS initialized.");
+            else
+                Logger.Error("EOS initialization failed.");
+        }
+
+        public bool IsFriend(string id)
+            => false;
+    }
+
+    internal class EpicLobby : IMatchmakingLobby
+    {
+        public string Owner => GetOwner();
+
+        public bool IsOwnerMe => ((Utf8String)EOSHandler.AuthManager.LocalUserId) == Owner;
+
+        private LobbyDetails Details { get; }
+
+        private EOSHandler EOSHandler { get; }
+
+        public EpicLobby(LobbyDetails details, EOSHandler handler)
+        {
+            Details = details;
+            EOSHandler = handler;
+        }
+
+        public bool TryGetData(string key, out string value)
+        {
+            value = string.Empty;
+
+            if (Details == null)
+                return false;
+
+            var options = new LobbyDetailsCopyAttributeByKeyOptions
+            {
+                AttrKey = key
+            };
+
+            var result = Details.CopyAttributeByKey(ref options, out var attribute);
+
+            if (result == Result.Success && attribute.HasValue)
+            {
+                value = attribute.Value.Data?.Value.AsUtf8 ?? string.Empty;
+                return !string.IsNullOrEmpty(value);
+            }
+
+            return false;
+        }
+
+        public string GetData(string key)
+        {
+            TryGetData(key, out var value);
+            return value;
+        }
+
+        private string GetOwner()
+        {
+            var options = new LobbyDetailsGetLobbyOwnerOptions();
+            var id = Details?.GetLobbyOwner(ref options);
+            if (id == null)
+                return string.Empty;
+
+            return (Utf8String)id;
+        }
+    }
+}

@@ -1,9 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<DefineConstants>EOS_PLATFORM_WINDOWS_64</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -13,9 +15,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="C:\Users\HAHOOS\.nuget\packages\facepunch.steamworks.library\2.3.3\build\..\build\x64\steam_api64.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		<None Update="Dependencies\libraries\EOSSDK-Win64-Shipping.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Dependencies\EOSSDK\" />
 	</ItemGroup>
 
 </Project>
