@@ -35,6 +35,8 @@ namespace FusionAPI
 
         private string? previouslyStoredGuardData;
 
+        private long ReconnectTime { get; set; } = -1;
+
         public SteamKitHandler()
         {
             SteamClient = new SteamClient();
@@ -99,6 +101,20 @@ namespace FusionAPI
                     ShouldRememberPassword = true,
                 });
             }
+            catch (AuthenticationException ex)
+            {
+                if (ex.Result == EResult.RateLimitExceeded)
+                {
+                    Logger?.Error("Authentication failed due to rate limit, retrying after 5 mins");
+                }
+                else
+                {
+                    ReconnectTime = DateTimeOffset.Now.AddMinutes(5).ToUnixTimeMilliseconds();
+                    Logger?.Error("Authentication failed: {0}", ex);
+                }
+
+                SteamClient?.Disconnect();
+            }
             catch (Exception ex)
             {
                 Logger?.Error("An error occurred during Steam authentication: {0}", ex);
@@ -115,7 +131,15 @@ namespace FusionAPI
         private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
         {
             const int reconnectDelay = 5000;
-            await Task.Delay(reconnectDelay);
+            if (ReconnectTime > 0)
+            {
+                await Task.Delay(reconnectDelay);
+            }
+            else
+            {
+                while (ReconnectTime > 0 && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < ReconnectTime)
+                    await Task.Delay(50);
+            }
             if (SteamClient == null || SteamClient?.IsConnected == true)
                 return;
             Logger?.Info("Reconnecting to Steam...");
