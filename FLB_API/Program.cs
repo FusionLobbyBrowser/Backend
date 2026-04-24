@@ -255,24 +255,10 @@ namespace FLB_API
                 {
                     try
                     {
-                        Logger?.Information("Fetching Steam lobbies...");
-                        var lobbies = await FusionClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
-                        int players = 0;
-                        foreach (var lobby in lobbies)
-                            players += lobby.PlayerCount;
                         Date = DateTime.UtcNow;
-                        SteamLobbies = lobbies;
 
-                        Logger?.Information($"Successfully fetched Steam lobbies ({lobbies.Length})...");
-
-                        Logger?.Information("Fetching EOS lobbies...");
-                        var eLobbies = await EOSClient.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
-                        int ePlayers = 0;
-                        foreach (var lobby in eLobbies)
-                            ePlayers += lobby.PlayerCount;
-                        EOSLobbies = eLobbies;
-
-                        Logger?.Information($"Successfully fetched EOS lobbies ({eLobbies.Length})...");
+                        SteamLobbies = await FusionClient.FetchLobbies("Steam");
+                        EOSLobbies = await EOSClient.FetchLobbies("EOS");
                         LoadSettings();
                     }
                     catch (Exception e)
@@ -286,6 +272,19 @@ namespace FLB_API
                 }
                 await Task.Delay((Settings?.Interval ?? 30) * 1000, token);
             }
+        }
+
+        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name)
+        {
+            if (client == null)
+                return [];
+
+            Logger?.Information($"Fetching {name} lobbies...");
+            var lobbies = await client.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+
+            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})...");
+
+            return lobbies;
         }
 
         private static async Task<string> GetCodeFromEmail(string email, bool previousCodeWasIncorrect)

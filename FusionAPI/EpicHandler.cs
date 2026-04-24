@@ -1,8 +1,9 @@
-﻿using Epic.OnlineServices;
+using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
 
 using FusionAPI.EOS.Auth;
 using FusionAPI.EOS.Core;
+using FusionAPI.Epic;
 using FusionAPI.Interfaces;
 
 namespace FusionAPI
@@ -11,30 +12,43 @@ namespace FusionAPI
     {
         public bool IsInitialized => EOSManager?.IsInitialized ?? false;
 
-        public EOSManager EOSManager { get; private set; }
+        internal EOSManager EOSManager { get; private set; }
 
-        public EOSAuthManager AuthManager { get; private set; }
+        internal EOSAuthManager AuthManager { get; private set; }
 
         public ILogger Logger { get; private set; }
 
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
-            var options = new CreateLobbySearchOptions()
+            var options = new CreateLobbySearchOptions
             {
-                MaxResults = uint.MaxValue
+                MaxResults = 200
             };
-            LobbySearch searchHandle = null;
-            var res = EOSInterfaces.Lobby?.CreateLobbySearch(ref options, out searchHandle);
 
-            if (searchHandle == null)
-            {
-                Logger.Error("LobbySearch handle is null after creation");
-                return [];
-            }
+            LobbySearch searchHandle = null;
+
+            var res = EOSInterfaces.Lobby?.CreateLobbySearch(ref options, out searchHandle);
 
             if (res != Result.Success)
             {
                 Logger.Error($"Failed to create lobby search handle: {res}");
+                return [];
+            }
+
+            var identifierParam = new LobbySearchSetParameterOptions
+            {
+                Parameter = new AttributeData
+                {
+                    Key = LobbyKeys.IdentifierKey,
+                    Value = bool.TrueString,
+                },
+                ComparisonOp = ComparisonOp.Equal,
+            };
+            searchHandle.SetParameter(ref identifierParam);
+
+            if (searchHandle == null)
+            {
+                Logger.Error("LobbySearch handle is null after creation");
                 return [];
             }
 
@@ -43,15 +57,15 @@ namespace FusionAPI
                 LocalUserId = AuthManager.LocalUserId
             };
 
-            List<IMatchmakingLobby> lobbies = [];
-            bool finished = false;
+            var tcs = new TaskCompletionSource<IMatchmakingLobby[]>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
 
-            searchHandle?.Find(ref findOptions, null, (ref info) =>
+            searchHandle.Find(ref findOptions, null, (ref LobbySearchFindCallbackInfo info) =>
             {
                 if (info.ResultCode != Result.Success)
                 {
                     Logger.Error($"Failed to find lobbies: {info.ResultCode}");
-                    finished = true;
+                    tcs.SetResult([]);
                     return;
                 }
 
@@ -61,12 +75,12 @@ namespace FusionAPI
                 if (lobbyCount == 0)
                 {
                     Logger.Trace("No lobbies found.");
-                    finished = true;
+                    tcs.SetResult([]);
                     return;
                 }
-                var lobbyDetailsToProcess = new List<(uint Index, LobbyDetails Details)>((int)lobbyCount);
 
-                // First pass: Copy all lobby details (fast)
+                var lobbyDetailsToProcess = new List<LobbyDetails>((int)lobbyCount);
+
                 for (uint i = 0; i < lobbyCount; i++)
                 {
                     var copyOptions = new LobbySearchCopySearchResultByIndexOptions
@@ -74,63 +88,49 @@ namespace FusionAPI
                         LobbyIndex = i
                     };
 
-                    if (searchHandle.CopySearchResultByIndex(ref copyOptions, out var lobbyDetails) == Result.Success &&
-                        lobbyDetails != null)
+                    if (searchHandle.CopySearchResultByIndex(ref copyOptions, out var lobbyDetails) == Result.Success
+                        && lobbyDetails != null)
                     {
-                        lobbyDetailsToProcess.Add((i, lobbyDetails));
+                        lobbyDetailsToProcess.Add(lobbyDetails);
                     }
                 }
 
-                // Second pass: Process lobby details (can be parallelized, but EOS callbacks are single-threaded)
-                foreach (var (index, lobbyDetails) in lobbyDetailsToProcess)
+                var lobbies = new List<IMatchmakingLobby>(lobbyDetailsToProcess.Count);
+
+                foreach (var lobbyDetails in lobbyDetailsToProcess)
                 {
-                    var lobbyInfo = ProcessSingleLobby(lobbyDetails);
-                    if (lobbyInfo != null)
-                    {
-                        lobbies.Add(lobbyInfo);
-                    }
+                    var lobby = ProcessSingleLobby(lobbyDetails);
+                    if (lobby != null)
+                        lobbies.Add(lobby);
                     else
-                    {
                         lobbyDetails.Release();
-                    }
                 }
+
+                tcs.SetResult([.. lobbies]);
             });
 
-            while (!finished)
-                await Task.Yield();
-
-            return [.. lobbies];
+            return await tcs.Task;
         }
 
         private IMatchmakingLobby? ProcessSingleLobby(LobbyDetails lobbyDetails)
         {
-            // Quick validation: Check owner exists
             var ownerOptions = new LobbyDetailsGetLobbyOwnerOptions();
             var ownerId = lobbyDetails.GetLobbyOwner(ref ownerOptions);
 
             if (ownerId == null)
-                return null; // Dead lobby
+                return null;
 
-            // Get lobby info
             var infoOptions = new LobbyDetailsCopyInfoOptions();
             if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
                 return null;
 
             var networkLobby = new EpicLobby(lobbyDetails, this);
 
-            // Validate server is open
             if (!networkLobby.TryGetData(LobbyKeys.HasLobbyOpenKey, out var hasServerOpen) ||
                 hasServerOpen != bool.TrueString)
                 return null;
 
-            // Read metadata
-
             var metadata = ReadMetadata(networkLobby);
-
-#if !DEBUG
-        if (metadata.LobbyInfo.LobbyHostID == PlayerIDManager.LocalPlatformID)
-            return null;
-#endif
 
             if (metadata == null)
                 return null;
@@ -141,7 +141,7 @@ namespace FusionAPI
             return networkLobby;
         }
 
-        private LobbyMetadataInfo ReadMetadata(IMatchmakingLobby lobby)
+        private LobbyMetadataInfo? ReadMetadata(IMatchmakingLobby lobby)
         {
             try
             {
@@ -150,21 +150,26 @@ namespace FusionAPI
             catch (Exception ex)
             {
                 Logger.Error($"Failed to read lobby metadata", ex);
-                return new() { HasLobbyOpen = false };
+                return null;
             }
         }
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
             Logger = logger;
+
+            var eosSDKPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dependencies", "EOSSDK-Win64-Shipping.dll");
+            DllTools.LoadLibrary(eosSDKPath);
+
             AuthManager = new EOSAuthManager(logger);
             EOSManager = new EOSManager(AuthManager, logger);
 
-            var success = await EOSManager.InitializeAsync();
+            bool success = await EOSManager.InitializeAsync();
+
             if (success)
-                Logger.Info("EOS Initialized successfully.");
+                Logger.Info("EOS initialized.");
             else
-                Logger.Error("Failed to initialize EOS.");
+                Logger.Error("EOS initialization failed.");
         }
 
         public bool IsFriend(string id)

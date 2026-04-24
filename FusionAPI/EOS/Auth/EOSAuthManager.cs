@@ -1,84 +1,97 @@
-﻿using Epic.OnlineServices;
+using Epic.OnlineServices;
 using Epic.OnlineServices.Connect;
 
 using FusionAPI.EOS.Core;
 using FusionAPI.Interfaces;
 
-using System.Collections;
-
 namespace FusionAPI.EOS.Auth;
 
-/// <summary>
-/// Manages EOS authentication flow.
-/// </summary>
-public class EOSAuthManager
+internal class EOSAuthManager
 {
-    private readonly EOSDeviceIdAuth _deviceIdAuth;
+    internal const string UnknownDisplayName = "Unknown";
 
-    public ProductUserId LocalUserId { get; private set; }
+    internal ProductUserId? LocalUserId { get; private set; }
 
-    private ILogger Logger { get; set; }
+    private readonly EOSAuthInterface _authInterface;
+    private bool IsLoggedIn => LocalUserId != null;
+    private ulong _expirationNotificationId;
 
-    public bool IsLoggedIn => LocalUserId != null;
+    private ILogger Logger { get; }
 
-    public EOSAuthManager(ILogger logger)
+    internal EOSAuthManager(ILogger logger)
     {
-        _deviceIdAuth = new EOSDeviceIdAuth(logger);
+        _authInterface = new EOSOculusAuth();
         Logger = logger;
     }
 
-    public async Task<bool> LoginAsync()
+    internal async Task<bool> LoginAsync()
     {
-        Logger.Info("Logging in...");
-        // Step 1: Create device ID
-        bool deviceIdSuccess = await _deviceIdAuth.CreateDeviceIdAsync();
+        bool success = await LoginWithInterfaceAsync();
 
-        if (!deviceIdSuccess)
+        if (success)
         {
-            Logger.Error("Failed to create device ID, cannot log in");
-            return false;
-        }
-
-        // Step 2: Login with device ID
-
-        var loginSuccess = await LoginWithDeviceIdAsync();
-
-        if (loginSuccess)
             RegisterAuthExpiration();
 
-        return loginSuccess;
+#if DEBUG
+            Logger.Info($"Logged in successfully! PUID = {LocalUserId}");
+#endif
+        }
+
+        return success;
     }
 
-    private async Task<bool> LoginWithDeviceIdAsync()
+    internal void Shutdown()
     {
-        Logger.Info("Logging in with device ID...");
+        _authInterface.OnShutdown();
+        UnregisterAuthExpiration();
+    }
+
+    internal async Task<string> GetDisplayNameAsync()
+    {
+        if (!IsLoggedIn)
+            return UnknownDisplayName;
+
+        string? displayName = await _authInterface.GetDisplayNameAsync();
+        return !string.IsNullOrEmpty(displayName) ? displayName! : UnknownDisplayName;
+    }
+
+    private async Task<bool> LoginWithInterfaceAsync()
+    {
         var connect = EOSInterfaces.Connect;
         if (connect == null)
         {
-            Logger.Error("ConnectInterface is null when logging in");
+            Logger.Error("ConnectInterface is null");
             return false;
         }
 
-        // Get username
-        const string username = "FusionLobbyBrowser";
+        string? platformToken = await _authInterface.GetLoginTicketAsync();
 
-        // Attempt login
-        bool finished = false;
-        bool success = false;
-        ContinuanceToken continuanceToken = null;
+        if (!_authInterface.AllowNullToken && string.IsNullOrEmpty(platformToken))
+        {
+            Logger.Error($"Failed to retrieve token for {_authInterface.AccountType}");
+            return false;
+        }
 
         var loginOptions = new LoginOptions
         {
             Credentials = new Credentials
             {
-                Type = ExternalCredentialType.DeviceidAccessToken,
-                Token = null,
-            },
-            UserLoginInfo = new UserLoginInfo
-            {
-                DisplayName = username
-            },
+                Type = _authInterface.CredentialType,
+                Token = platformToken,
+            }
         };
+
+        if (_authInterface.LoginWithDisplayName)
+        {
+            string displayName = await GetDisplayNameAsync();
+
+            loginOptions.UserLoginInfo = new UserLoginInfo
+            {
+                DisplayName = displayName
+            };
+        }
+
+        var loginTcs = new TaskCompletionSource<(bool success, ContinuanceToken? continuance)>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         connect.Login(ref loginOptions, null, (ref LoginCallbackInfo data) =>
         {
@@ -86,107 +99,101 @@ public class EOSAuthManager
             {
                 case Result.Success:
                     LocalUserId = data.LocalUserId;
-#if DEBUG
-                    Logger.Info($"Logged in successfully! PUID = {LocalUserId}");
-#endif
-                    success = true;
-                    finished = true;
+                    loginTcs.SetResult((true, null));
                     break;
 
                 case Result.InvalidUser:
-                    continuanceToken = data.ContinuanceToken;
+                    loginTcs.SetResult((false, data.ContinuanceToken));
                     break;
 
                 default:
-                    Logger.Error($"Login failed: {data.ResultCode}");
-                    finished = true;
+                    Logger.Error($"EOS Login failed: {data.ResultCode}");
+                    loginTcs.SetResult((false, null));
                     break;
             }
         });
 
-        while (!finished && continuanceToken == null)
-            await Task.Yield();
+        var (loginSuccess, continuanceToken) = await loginTcs.Task;
 
-        // Create user if needed
+        if (loginSuccess)
+            return true;
+
         if (continuanceToken != null)
-            success = await CreateUserAsync(continuanceToken);
+            return await CreateUserAsync(continuanceToken);
 
-        return success;
+        return false;
     }
 
     private async Task<bool> CreateUserAsync(ContinuanceToken token)
     {
         var connect = EOSInterfaces.Connect;
-        if (connect == null)
-        {
-            Logger.Error("ConnectInterface is null when creating user");
-            return false;
-        }
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        bool finished = false;
-        bool success = false;
-
-        var options = new CreateUserOptions
-        {
-            ContinuanceToken = token
-        };
+        var options = new CreateUserOptions { ContinuanceToken = token };
 
         connect.CreateUser(ref options, null, (ref CreateUserCallbackInfo data) =>
         {
             if (data.ResultCode == Result.Success)
             {
                 LocalUserId = data.LocalUserId;
-                Logger.Info($"User created successfully! PUID = {LocalUserId}");
-                success = true;
+                tcs.SetResult(true);
             }
             else
             {
-                Logger.Error($"CreateUser failed: {data.ResultCode}");
+                Logger.Error($"EOS CreateUser failed: {data.ResultCode}");
+                tcs.SetResult(false);
             }
-            finished = true;
         });
 
-        while (!finished)
-            await Task.Yield();
-
-        return success;
+        return await tcs.Task;
     }
 
     private void RegisterAuthExpiration()
     {
-        var notifyAuthExpirationOptions = new AddNotifyAuthExpirationOptions();
-        EOSInterfaces.Connect.AddNotifyAuthExpiration(ref notifyAuthExpirationOptions, null, AuthExpirationCallback);
+        UnregisterAuthExpiration();
+
+        var expirationOptions = new AddNotifyAuthExpirationOptions();
+        _expirationNotificationId = EOSInterfaces.Connect.AddNotifyAuthExpiration(
+            ref expirationOptions, null,
+            (ref AuthExpirationCallbackInfo _) =>
+            {
+#if DEBUG
+                Logger.Info("EOS token expiring - starting refresh...");
+#endif
+
+                RefreshTokenAsync();
+            }
+        );
     }
 
-    private void AuthExpirationCallback(ref AuthExpirationCallbackInfo data)
+    private void UnregisterAuthExpiration()
     {
-        var loginOptions = new LoginOptions
+        if (_expirationNotificationId != 0)
         {
-            Credentials = new Credentials
-            {
-                Type = ExternalCredentialType.DeviceidAccessToken,
-                Token = null,
-            },
-            UserLoginInfo = new UserLoginInfo
-            {
-                DisplayName = "Fusion Lobby Browser"
-            },
-        };
+            EOSInterfaces.Connect.RemoveNotifyAuthExpiration(_expirationNotificationId);
+            _expirationNotificationId = 0;
+        }
+    }
 
-        EOSInterfaces.Connect.Login(ref loginOptions, null, (ref LoginCallbackInfo data) =>
-        {
-            switch (data.ResultCode)
-            {
-                case Result.Success:
+    private async Task RefreshTokenAsync()
+    {
 #if DEBUG
-                    Logger.Info("Token refreshed!");
+        Logger.Info("Refreshing EOS token...");
 #endif
-                    break;
 
-                default:
-                    Logger.Error($"Token refresh failed with result: {data.ResultCode}");
-                    break;
-            }
-        });
+        bool success = await LoginWithInterfaceAsync();
+
+        if (success)
+        {
+#if DEBUG
+            Logger.Info("EOS token refreshed successfully.");
+#endif
+            RegisterAuthExpiration();
+        }
+        else
+        {
+            Logger.Error("EOS token refresh failed - user may need to re-authenticate.");
+            LocalUserId = null;
+        }
     }
 }

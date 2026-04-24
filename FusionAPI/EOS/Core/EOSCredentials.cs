@@ -1,6 +1,6 @@
-﻿namespace FusionAPI.EOS.Core;
+namespace FusionAPI.EOS.Core;
 
-public static class EOSCredentials
+internal static class EOSCredentials
 {
     internal const string ProductName = "Fusion";
     internal const string ProductVersion = "0.0.1";

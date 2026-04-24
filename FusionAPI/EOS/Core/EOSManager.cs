@@ -1,107 +1,96 @@
-﻿using System.Collections;
-using System.Diagnostics;
-
 using Epic.OnlineServices;
 using Epic.OnlineServices.Logging;
 using Epic.OnlineServices.Platform;
 
 using FusionAPI.EOS.Auth;
+using FusionAPI.Epic;
 using FusionAPI.Interfaces;
-
-using System.Timers;
 
 namespace FusionAPI.EOS.Core;
 
-/// <summary>
-/// Manages EOS SDK initialization, lifecycle, and ticking.
-/// </summary>
-public class EOSManager
+internal class EOSManager : IDisposable
 {
-    private const float TickInterval = 1f / 20f;
+    private const int TickIntervalMs = 50;
 
     private readonly EOSAuthManager _authManager;
-    private bool _isInitialized;
+    private readonly EOSThreadDispatcher _dispatcher;
+    private readonly ILogger _logger;
 
-    public bool IsInitialized => _isInitialized;
+    private CancellationTokenSource? _tickCts;
+    internal bool IsInitialized { get; private set; }
 
-    private System.Timers.Timer _tickTimer;
-
-    private ILogger Logger { get; }
-
-    public EOSManager(EOSAuthManager authManager, ILogger logger)
+    internal EOSManager(EOSAuthManager authManager, ILogger logger)
     {
         _authManager = authManager ?? throw new ArgumentNullException(nameof(authManager));
-        Logger = logger;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _dispatcher = new EOSThreadDispatcher();
     }
 
-    public async Task<bool> InitializeAsync()
-    {
-        Logger.Info("Initializing EOS Manager...");
-        if (_isInitialized)
+    internal Task<bool> InitializeAsync()
+        => _dispatcher.RunOnEOSThreadAsync(async () =>
         {
-            Logger.Warning("EOS is already initialized");
-            return true;
-        }
+            if (IsInitialized)
+            {
+                _logger.Warning("EOS is already initialized");
+                return true;
+            }
 
-        if (!InitializePlatform())
-        {
-            Logger.Error("Failed to initialize EOS Platform");
-            return true;
-        }
+            if (!InitializePlatform())
+                return false;
 
-        if (!InitializeInterfaces())
-        {
-            Logger.Error("Failed to initialize EOS Interfaces");
-            Shutdown();
-            return false;
-        }
+            if (!InitializeInterfaces())
+            {
+                Shutdown();
+                return false;
+            }
 
 #if DEBUG
-        ConfigureLogging();
+            ConfigureLogging();
 #endif
 
-        while (!EOSInterfaces.IsInitialized)
-            await Task.Yield();
+            StartTicker();
 
-        TickerTask();
+            bool loginSuccess = await _authManager.LoginAsync();
 
-        Logger.Info("Logging into EOS...");
+            if (!loginSuccess)
+            {
+                Shutdown();
+                return false;
+            }
 
-        var loginSuccess = await _authManager.LoginAsync();
+            IsInitialized = true;
+            return true;
+        })
+        .Unwrap();
 
-        Logger.Info($"Login complete. Success: {loginSuccess}");
+    internal void Shutdown()
+    {
+        _tickCts?.Cancel();
+        _tickCts = null;
 
-        if (!loginSuccess)
-        {
-            Shutdown();
-            return false;
-        }
-
-        _isInitialized = true;
-        return true;
+        IsInitialized = false;
+        EOSInterfaces.Shutdown();
     }
 
-    public void Shutdown()
+    public void Dispose()
     {
-        _isInitialized = false;
-        _tickTimer?.Dispose();
-        EOSInterfaces.Shutdown();
+        Shutdown();
+        _dispatcher.Dispose();
     }
 
     private bool InitializePlatform()
     {
-        Logger.Info("Initializing EOS Platform...");
         var initializeOptions = new InitializeOptions
         {
             ProductName = EOSCredentials.ProductName,
-            ProductVersion = EOSCredentials.ProductVersion
+            ProductVersion = EOSCredentials.ProductVersion,
         };
 
         var result = PlatformInterface.Initialize(ref initializeOptions);
 
         if (result != Result.Success && result != Result.AlreadyConfigured)
         {
-            Logger.Error($"Failed to initialize EOS Platform: {result}");
+            _logger.Error($"Failed to initialize EOS Platform: {result}");
             return false;
         }
 
@@ -110,7 +99,6 @@ public class EOSManager
 
     private bool InitializeInterfaces()
     {
-        Logger.Info("Initializing EOS Interfaces...");
         var options = new Options
         {
             ProductId = EOSCredentials.ProductId,
@@ -119,16 +107,16 @@ public class EOSManager
             ClientCredentials = new ClientCredentials
             {
                 ClientId = EOSCredentials.ClientId,
-                ClientSecret = EOSCredentials.ClientSecret
+                ClientSecret = EOSCredentials.ClientSecret,
             },
-            Flags = PlatformFlags.DisableOverlay | PlatformFlags.DisableSocialOverlay
+            Flags = PlatformFlags.DisableOverlay | PlatformFlags.DisableSocialOverlay,
         };
 
         var platform = PlatformInterface.Create(ref options);
 
         if (platform == null)
         {
-            Logger.Error("Failed to create EOS Platform Interface");
+            _logger.Error("Failed to create EOS Platform Interface");
             return false;
         }
 
@@ -136,7 +124,7 @@ public class EOSManager
 
         if (!EOSInterfaces.ValidateInterfaces())
         {
-            Logger.Error("Failed to get one or more EOS interfaces");
+            _logger.Error("Failed to get one or more EOS interfaces");
             return false;
         }
 
@@ -145,32 +133,35 @@ public class EOSManager
 
     private void ConfigureLogging()
     {
-        Logger.Info("Configuring EOS logging...");
-        LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Off);
-        LoggingInterface.SetCallback((ref message) => Logger.Info($"[EOS] {message.Message}"));
+        LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Info);
+        LoggingInterface.SetCallback((ref LogMessage message) =>
+        {
+#if DEBUG
+            _logger.Info($"EOS -> {message.Message}");
+#endif
+        });
     }
 
-    private void TickerTask()
+    private void StartTicker()
     {
-        _tickTimer = new()
-        {
-            Interval = TickInterval * 1000,
+        _tickCts = new CancellationTokenSource();
+        var token = _tickCts.Token;
 
-            AutoReset = true
-        };
-        _tickTimer.Elapsed += (sender, e) => TickerCallback();
-        _tickTimer.Start();
-    }
+        _dispatcher.Post(async () =>
+        {
+            while (!token.IsCancellationRequested && EOSInterfaces.IsInitialized)
+            {
+                try
+                {
+                    EOSInterfaces.Platform?.Tick();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Trace("Error ticking EOS platform", ex);
+                }
 
-    private void TickerCallback()
-    {
-        try
-        {
-            EOSInterfaces.Platform?.Tick();
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("ticking EOS platform", ex);
-        }
+                await Task.Delay(TickIntervalMs, token).ConfigureAwait(true);
+            }
+        });
     }
 }

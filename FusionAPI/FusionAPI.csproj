@@ -15,11 +15,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="Dependencies\libraries\steam_api64.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
 		<None Update="Dependencies\libraries\EOSSDK-Win64-Shipping.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
 

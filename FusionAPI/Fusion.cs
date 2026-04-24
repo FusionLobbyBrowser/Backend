@@ -1,4 +1,6 @@
-﻿using FusionAPI.Data.Containers;
+﻿using System.Diagnostics;
+
+using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
 namespace FusionAPI
@@ -78,5 +80,8 @@ namespace FusionAPI
 
             return false;
         }
+
+        internal static bool IsTypeNumber(Type type)
+            => type == typeof(int) || type == typeof(long) || type == typeof(ulong);
     }
 }

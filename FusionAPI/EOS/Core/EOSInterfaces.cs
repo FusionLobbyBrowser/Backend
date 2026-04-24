@@ -1,21 +1,18 @@
-﻿using Epic.OnlineServices.Connect;
+using Epic.OnlineServices.Connect;
 using Epic.OnlineServices.Lobby;
 using Epic.OnlineServices.P2P;
 using Epic.OnlineServices.Platform;
 
 namespace FusionAPI.EOS.Core;
 
-/// <summary>
-/// Provides access to EOS interface instances.
-/// </summary>
-public static class EOSInterfaces
+internal static class EOSInterfaces
 {
-    public static PlatformInterface? Platform { get; private set; }
-    public static ConnectInterface? Connect { get; private set; }
-    public static P2PInterface? P2P { get; private set; }
-    public static LobbyInterface? Lobby { get; private set; }
+    internal static PlatformInterface Platform { get; private set; }
+    internal static ConnectInterface Connect { get; private set; }
+    internal static P2PInterface P2P { get; private set; }
+    internal static LobbyInterface Lobby { get; private set; }
 
-    public static bool IsInitialized => Platform != null;
+    internal static bool IsInitialized => Platform != null;
 
     internal static void Initialize(PlatformInterface platform)
     {
