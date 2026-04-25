@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
 
@@ -10,6 +12,8 @@ namespace FusionAPI
 {
     public class EOSHandler : IMatchmakingHandler
     {
+        private static bool EOSDllResolverConfigured { get; set; } = false;
+
         public bool IsInitialized => EOSManager?.IsInitialized ?? false;
 
         internal EOSManager EOSManager { get; private set; }
@@ -60,7 +64,7 @@ namespace FusionAPI
             var tcs = new TaskCompletionSource<IMatchmakingLobby[]>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
 
-            searchHandle.Find(ref findOptions, null, (ref LobbySearchFindCallbackInfo info) =>
+            searchHandle.Find(ref findOptions, null, (ref info) =>
             {
                 if (info.ResultCode != Result.Success)
                 {
@@ -112,7 +116,7 @@ namespace FusionAPI
             return await tcs.Task;
         }
 
-        private IMatchmakingLobby? ProcessSingleLobby(LobbyDetails lobbyDetails)
+        private EpicLobby? ProcessSingleLobby(LobbyDetails lobbyDetails)
         {
             var ownerOptions = new LobbyDetailsGetLobbyOwnerOptions();
             var ownerId = lobbyDetails.GetLobbyOwner(ref ownerOptions);
@@ -128,7 +132,9 @@ namespace FusionAPI
 
             if (!networkLobby.TryGetData(LobbyKeys.HasLobbyOpenKey, out var hasServerOpen) ||
                 hasServerOpen != bool.TrueString)
+            {
                 return null;
+            }
 
             var metadata = ReadMetadata(networkLobby);
 
@@ -149,7 +155,7 @@ namespace FusionAPI
             }
             catch (Exception ex)
             {
-                Logger.Error($"Failed to read lobby metadata", ex);
+                Logger.Error("Failed to read lobby metadata", ex);
                 return null;
             }
         }
@@ -158,8 +164,62 @@ namespace FusionAPI
         {
             Logger = logger;
 
-            var eosSDKPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dependencies", "EOSSDK-Win64-Shipping.dll");
-            DllTools.LoadLibrary(eosSDKPath);
+            var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            string[] candidates;
+
+            const string linuxFormat = "libEOSSDK-Linux{0}-Shipping.so";
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                if (RuntimeInformation.OSArchitecture == Architecture.Arm64)
+                {
+                    candidates = [
+                        string.Format(linuxFormat, "Arm64"),
+                        string.Format(linuxFormat, string.Empty),
+                                ];
+                }
+                else
+                {
+                    candidates = [string.Format(linuxFormat, string.Empty)];
+                }
+            }
+            else
+            {
+                candidates = ["EOSSDK-Win64-Shipping.dll"];
+            }
+
+            IntPtr handle = IntPtr.Zero;
+            string? loadedPath = null;
+
+            foreach (var candidate in candidates)
+            {
+                var path = Path.Combine(baseDirectory, candidate);
+                Logger.Info("Loading SDK from " + path);
+                handle = DllTools.LoadLibrary(path);
+                if (handle != IntPtr.Zero)
+                {
+                    loadedPath = path;
+                    break;
+                }
+            }
+
+            if (handle == IntPtr.Zero)
+                throw new DllNotFoundException($"Unable to load EOS SDK native library. Tried: {string.Join(", ", candidates)} in {baseDirectory}");
+
+            if (!EOSDllResolverConfigured)
+            {
+                NativeLibrary.SetDllImportResolver(typeof(Common).Assembly, (name, __, _) =>
+                {
+                    if (name.Contains("EOSSDK", StringComparison.OrdinalIgnoreCase))
+                        return handle;
+
+                    return IntPtr.Zero;
+                });
+
+                EOSDllResolverConfigured = true;
+            }
+
+            Logger.Info("EOS SDK loaded from " + loadedPath);
 
             AuthManager = new EOSAuthManager(logger);
             EOSManager = new EOSManager(AuthManager, logger);
@@ -176,21 +236,15 @@ namespace FusionAPI
             => false;
     }
 
-    internal class EpicLobby : IMatchmakingLobby
+    internal class EpicLobby(LobbyDetails details, EOSHandler handler) : IMatchmakingLobby
     {
         public string Owner => GetOwner();
 
         public bool IsOwnerMe => ((Utf8String)EOSHandler.AuthManager.LocalUserId) == Owner;
 
-        private LobbyDetails Details { get; }
+        private LobbyDetails Details { get; } = details;
 
-        private EOSHandler EOSHandler { get; }
-
-        public EpicLobby(LobbyDetails details, EOSHandler handler)
-        {
-            Details = details;
-            EOSHandler = handler;
-        }
+        private EOSHandler EOSHandler { get; } = handler;
 
         public bool TryGetData(string key, out string value)
         {

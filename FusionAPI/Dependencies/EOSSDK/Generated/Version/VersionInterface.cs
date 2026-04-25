@@ -18,7 +18,7 @@ namespace Epic.OnlineServices.Version
 		/// <summary>
 		/// The Hotfix version number
 		/// </summary>
-		public const int HOTFIX = 3;
+		public const int HOTFIX = 7;
 		/// <summary>
 		/// The Major version number
 		/// </summary>

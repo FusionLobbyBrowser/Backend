@@ -163,7 +163,7 @@ namespace FusionAPI
                 return;
             }
             IsLoggedOn = true;
-            Logger?.Info("Successfully logged in to Steam as {0}!", Username ?? "N/A");
+            Logger?.Info("Logged in to Steam as {0}!", Username ?? "N/A");
         }
 
         private void LoggedOffCallback(SteamUser.LoggedOffCallback callback)

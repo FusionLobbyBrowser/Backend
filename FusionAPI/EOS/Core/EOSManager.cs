@@ -137,7 +137,7 @@ internal class EOSManager : IDisposable
         LoggingInterface.SetCallback((ref LogMessage message) =>
         {
 #if DEBUG
-            _logger.Info($"EOS -> {message.Message}");
+            _logger.Info($"[{Enum.GetName(typeof(LogLevel), message.Level)?.ToUpper() ?? "N/A"}] {message.Message}");
 #endif
         });
     }

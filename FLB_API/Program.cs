@@ -107,11 +107,12 @@ namespace FLB_API
                     FusionClient = new Fusion(new SteamworksHandler());
                 }
 
-                var logger = new Logger(level);
+                var logger = new Logger(level, "Steam");
                 await FusionClient.Initialize(logger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
                 EOSClient = new Fusion(new EOSHandler());
-                await EOSClient.Initialize(logger, []);
+                var eosLogger = new Logger(level, "EOS");
+                await EOSClient.Initialize(eosLogger, []);
                 Logger?.Information("Successfully initialized EOS API");
                 Uptime = DateTime.UtcNow;
             }

@@ -5,8 +5,21 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<DefineConstants>EOS_PLATFORM_WINDOWS_64</DefineConstants>
+		<RuntimeIdentifiers>win-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
 	</PropertyGroup>
+
+	<Choose>
+		<When Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or '$(RuntimeIdentifier)' == 'linux-arm64'">
+			<PropertyGroup>
+				<DefineConstants>$(DefineConstants);EOS_PLATFORM_LINUX</DefineConstants>
+			</PropertyGroup>
+		</When>
+		<Otherwise>
+			<PropertyGroup>
+				<DefineConstants>$(DefineConstants);EOS_PLATFORM_WINDOWS_64</DefineConstants>
+			</PropertyGroup>
+		</Otherwise>
+	</Choose>
 
 	<ItemGroup>
 		<PackageReference Include="Facepunch.Steamworks" Version="2.3.3" />
@@ -15,13 +28,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="Dependencies\libraries\EOSSDK-Win64-Shipping.dll">
+		<None Update="EOSSDK-Win64-Shipping.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-	</ItemGroup>
-
-	<ItemGroup>
-		<Folder Include="Dependencies\EOSSDK\" />
+		<None Update="libEOSSDK-Linux-Shipping.so">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="libEOSSDK-LinuxArm64-Shipping.so">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 </Project>

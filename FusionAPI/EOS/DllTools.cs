@@ -4,12 +4,24 @@ namespace FusionAPI.Epic;
 
 public static class DllTools
 {
-    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern IntPtr LoadLibrary(string lpLibFileName);
+    public static IntPtr LoadLibrary(string lpLibFileName)
+    {
+        NativeLibrary.TryLoad(lpLibFileName, out IntPtr handle);
+        return handle;
+    }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool FreeLibrary(IntPtr hModule);
+    public static bool FreeLibrary(IntPtr hModule)
+    {
+        if (hModule != IntPtr.Zero)
+        {
+            NativeLibrary.Free(hModule);
+            return true;
+        }
+        return false;
+    }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern UInt32 GetLastError();
+    public static uint GetLastError()
+    {
+        return (uint)Marshal.GetLastPInvokeError();
+    }
 }

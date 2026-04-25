@@ -1,12 +1,9 @@
 ﻿using System.Text.Json;
-using System.Collections.Concurrent;
 
 namespace FLB_API.Managers
 {
     public static class ModIOManager
     {
-        private const long ExpireTime = 30 * 60;
-
         private const string FileFormat = "{mod_id}-{expire_time}-{maturity}.png";
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
@@ -102,7 +99,7 @@ namespace FLB_API.Managers
 
             if (long.TryParse(parts[1], out long expireTime))
             {
-                if ((DateTimeOffset.Now.ToUnixTimeSeconds() - expireTime) < ExpireTime)
+                if ((DateTimeOffset.Now.ToUnixTimeSeconds() - expireTime) < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60))
                 {
                     bool isNSFW = parts[2].StartsWith("nsfw");
                     return new LocalThumbnailResponse(modId, Path.Combine(cacheDir.FullName, name), isNSFW);
@@ -152,7 +149,7 @@ namespace FLB_API.Managers
                     cacheDir.FullName,
                     FormatFileName(
                         thumbnailResponse.ModId,
-                        DateTimeOffset.Now.AddSeconds(ExpireTime).ToUnixTimeSeconds(),
+                        DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60)).ToUnixTimeSeconds(),
                         thumbnailResponse.IsNSFW)
                     );
 

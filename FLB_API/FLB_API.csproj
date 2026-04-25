@@ -29,10 +29,4 @@
 		<ProjectReference Include="..\FusionAPI\FusionAPI.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<None Update="interval.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
-
 </Project>

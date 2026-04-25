@@ -32,9 +32,7 @@ internal class EOSAuthManager
         {
             RegisterAuthExpiration();
 
-#if DEBUG
             Logger.Info($"Logged in successfully! PUID = {LocalUserId}");
-#endif
         }
 
         return success;
@@ -157,9 +155,7 @@ internal class EOSAuthManager
             ref expirationOptions, null,
             (ref AuthExpirationCallbackInfo _) =>
             {
-#if DEBUG
                 Logger.Info("EOS token expiring - starting refresh...");
-#endif
 
                 RefreshTokenAsync();
             }
@@ -177,17 +173,13 @@ internal class EOSAuthManager
 
     private async Task RefreshTokenAsync()
     {
-#if DEBUG
         Logger.Info("Refreshing EOS token...");
-#endif
 
         bool success = await LoginWithInterfaceAsync();
 
         if (success)
         {
-#if DEBUG
             Logger.Info("EOS token refreshed successfully.");
-#endif
             RegisterAuthExpiration();
         }
         else
