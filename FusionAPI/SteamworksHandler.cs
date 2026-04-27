@@ -12,9 +12,14 @@ namespace FusionAPI
 
         private ILogger? Logger;
 
+        private DateTime _lastFetch = DateTime.Now;
+
+        public DateTime LastFetch => _lastFetch;
+
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
             var lobbies = ConvertLobbies(await GetSteamLobbies(includePrivate));
+            _lastFetch = DateTime.Now;
             return [.. lobbies];
         }
 

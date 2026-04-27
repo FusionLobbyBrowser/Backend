@@ -22,6 +22,10 @@ namespace FusionAPI
 
         public ILogger Logger { get; private set; }
 
+        private DateTime _lastFetch = DateTime.Now;
+
+        public DateTime LastFetch => _lastFetch;
+
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
             var options = new CreateLobbySearchOptions
@@ -119,6 +123,7 @@ namespace FusionAPI
                 tcs.SetResult([.. lobbies]);
             });
 
+            _lastFetch = DateTime.Now;
             return await tcs.Task;
         }
 

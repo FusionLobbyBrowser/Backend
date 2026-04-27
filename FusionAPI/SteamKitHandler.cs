@@ -37,6 +37,10 @@ namespace FusionAPI
 
         private long ReconnectTime { get; set; } = -1;
 
+        private DateTime _lastFetch = DateTime.Now;
+
+        public DateTime LastFetch => _lastFetch;
+
         public SteamKitHandler()
         {
             SteamClient = new SteamClient();
@@ -194,10 +198,13 @@ namespace FusionAPI
             var task = Matchmaking.GetLobbyList(Fusion.AppID, filters, maxLobbies: int.MaxValue);
             GetLobbyListCallback? lobbies = null;
             if (task != null)
-                lobbies = await task.ToTask().WaitAsync(CancellationToken.None);
+                lobbies = await task.ToTask();
 
             if (lobbies != null && lobbies.Result == EResult.OK)
+            {
+                _lastFetch = DateTime.Now;
                 return [.. ProcessLobbies(lobbies.Lobbies)];
+            }
             return [];
         }
 

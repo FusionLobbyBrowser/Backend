@@ -4,6 +4,7 @@ using FLB_API.Managers;
 
 using FusionAPI;
 using FusionAPI.Data.Containers;
+using FusionAPI.Interfaces;
 
 using Serilog;
 using Serilog.Sinks.Spectre;
@@ -23,8 +24,6 @@ namespace FLB_API
         internal static LobbyInfo[]? SteamLobbies { get; private set; }
 
         internal static LobbyInfo[]? EOSLobbies { get; private set; }
-
-        internal static DateTime Date { get; private set; } = DateTime.UtcNow;
 
         internal static DateTime Uptime { get; private set; }
 
@@ -51,6 +50,8 @@ namespace FLB_API
                 Password = ""
             }
         };
+
+        internal static List<IMatchmakingHandler> Handlers { get; } = [];
 
         public static async Task Main(string[] args)
         {
@@ -106,6 +107,7 @@ namespace FLB_API
                     Logger?.Information("Connecting with Steamworks");
                     FusionClient = new Fusion(new SteamworksHandler());
                 }
+                Handlers.Add(FusionClient.Handler);
 
                 var logger = new Logger(level, "Steam");
                 await FusionClient.Initialize(logger, metadata);
@@ -114,6 +116,7 @@ namespace FLB_API
                 var eosLogger = new Logger(level, "EOS");
                 await EOSClient.Initialize(eosLogger, []);
                 Logger?.Information("Successfully initialized EOS API");
+                Handlers.Add(EOSClient.Handler);
                 Uptime = DateTime.UtcNow;
             }
             catch (Exception e)
@@ -256,8 +259,6 @@ namespace FLB_API
                 {
                     try
                     {
-                        Date = DateTime.UtcNow;
-
                         SteamLobbies = await FusionClient.FetchLobbies("Steam");
                         EOSLobbies = await EOSClient.FetchLobbies("EOS");
                         LoadSettings();
@@ -281,7 +282,16 @@ namespace FLB_API
                 return [];
 
             Logger?.Information($"Fetching {name} lobbies...");
-            var lobbies = await client.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+            LobbyInfo[] lobbies;
+            try
+            {
+                lobbies = await client.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+            }
+            catch (Exception e)
+            {
+                Logger?.Error(e, $"Failed to fetch lobbies from {name}");
+                return [];
+            }
 
             Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})...");
 
