@@ -31,6 +31,12 @@ namespace FusionAPI
 
             LobbySearch searchHandle = null;
 
+            if (!AuthManager.IsLoggedIn)
+            {
+                Logger.Error("Failed to get lobbies, not logged into EOS!");
+                return [];
+            }
+
             var res = EOSInterfaces.Lobby?.CreateLobbySearch(ref options, out searchHandle);
 
             if (res != Result.Success)

@@ -13,7 +13,7 @@ internal class EOSAuthManager
     internal ProductUserId? LocalUserId { get; private set; }
 
     private readonly EOSAuthInterface _authInterface;
-    private bool IsLoggedIn => LocalUserId != null;
+    internal bool IsLoggedIn => LocalUserId != null;
     private ulong _expirationNotificationId;
 
     private ILogger Logger { get; }
@@ -153,11 +153,11 @@ internal class EOSAuthManager
         var expirationOptions = new AddNotifyAuthExpirationOptions();
         _expirationNotificationId = EOSInterfaces.Connect.AddNotifyAuthExpiration(
             ref expirationOptions, null,
-            (ref AuthExpirationCallbackInfo _) =>
+            (ref AuthExpirationCallbackInfo __) =>
             {
                 Logger.Info("EOS token expiring - starting refresh...");
 
-                RefreshTokenAsync();
+                _ = RefreshTokenAsync();
             }
         );
     }
@@ -184,8 +184,18 @@ internal class EOSAuthManager
         }
         else
         {
-            Logger.Error("EOS token refresh failed - user may need to re-authenticate.");
+            Logger.Error("EOS token refresh failed - attempting to re-authenticate...");
             LocalUserId = null;
+            bool authSuccess = await LoginWithInterfaceAsync();
+            if (authSuccess)
+            {
+                Logger.Info($"Logged back in successfully! PUID = {LocalUserId}");
+            }
+            else
+            {
+                Logger.Error("Failed to re-authenticate");
+                LocalUserId = null;
+            }
         }
     }
 }
