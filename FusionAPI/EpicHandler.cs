@@ -79,7 +79,8 @@ namespace FusionAPI
                 if (info.ResultCode != Result.Success)
                 {
                     Logger.Error($"Failed to find lobbies: {info.ResultCode}");
-                    tcs.SetResult([]);
+                    if (!tcs.TrySetResult([]))
+                        Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
                     return;
                 }
 
@@ -89,7 +90,8 @@ namespace FusionAPI
                 if (lobbyCount == 0)
                 {
                     Logger.Trace("No lobbies found.");
-                    tcs.SetResult([]);
+                    if (!tcs.TrySetResult([]))
+                        Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
                     return;
                 }
 
@@ -120,7 +122,8 @@ namespace FusionAPI
                         lobbyDetails.Release();
                 }
 
-                tcs.SetResult([.. lobbies]);
+                if (!tcs.TrySetResult([.. lobbies]))
+                    Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
             });
 
             _lastFetch = DateTime.Now;
