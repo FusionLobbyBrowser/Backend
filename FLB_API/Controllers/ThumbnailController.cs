@@ -9,18 +9,18 @@ namespace FLB_API.Controllers
     public class ThumbnailController : ControllerBase
     {
         [HttpGet(Name = "GetThumbnail")]
-        public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modId)
+        public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modId, [FromQuery(Name = "barcode")] string barcode = "")
         {
-            if (string.IsNullOrWhiteSpace(modId))
+            if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
                 return BadRequest("modId is required.");
 
-            if (!long.TryParse(modId, out long _modId))
+            if (!long.TryParse(modId, out long _modId) && string.IsNullOrWhiteSpace(barcode))
                 return BadRequest("modId is not valid.");
 
             MemoryThumbnail? thumbnail;
             try
             {
-                thumbnail = await ModIOManager.GetModThumbnail(_modId);
+                thumbnail = await ModIOManager.GetModThumbnail(_modId, barcode);
                 if (thumbnail == null)
                     return NotFound("Thumbnail not found.");
             }

@@ -42,11 +42,11 @@ namespace FLB_API.Managers
                 return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60)), maturity);
         }
 
-        public static async Task<MemoryThumbnail?> GetModThumbnail(long modId)
+        public static async Task<MemoryThumbnail?> GetModThumbnail(long modId, string barcode = "")
         {
             try
             {
-                Program.Logger?.Information($"Getting mod thumbnail for {modId}");
+                Program.Logger?.Information($"Getting mod thumbnail for {modId} ({barcode ?? "N/A"})");
                 if (!STORE_IN_MEMORY)
                 {
                     DirectoryInfo current = new(Directory.GetCurrentDirectory());
@@ -85,17 +85,34 @@ namespace FLB_API.Managers
                 }
                 else
                 {
+                    if (modId == -1)
+                    {
+                        if (string.IsNullOrWhiteSpace(barcode))
+                            return null;
+
+                        Program.Logger?.Information($"A barcode was only provided, trying to find an existing cache...");
+                        var _item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
+                        // This ignores cache, as level without mod id is quite rare and theres a chance there will be another request to have a mod id associated
+                        if (_item != null)
+                        {
+                            Program.Logger?.Information($"Found cached mod thumbnail for {barcode}");
+                            return _item;
+                        }
+                    }
+
                     var item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
                     if (item != null)
                     {
                         if ((DateTimeOffset.Now - item.ExpireTime).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60))
                         {
                             Program.Logger?.Information($"Found cached mod thumbnail for {modId}");
+                            if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
+                                item.Barcodes.Add(barcode);
                             return item;
                         }
                         else
                         {
-                            Program.Logger?.Information($"Found an outdated thumbnail, removing...");
+                            Program.Logger?.Information("Found an outdated thumbnail, removing...");
                             Thumbnails.Remove(item);
                         }
                     }
@@ -105,6 +122,8 @@ namespace FLB_API.Managers
                     {
                         var image = await GetImage(remoteThumbnail.ThumbnailUrl);
                         item = new MemoryThumbnail(remoteThumbnail.ModId, image, remoteThumbnail.ExpireTime, remoteThumbnail.IsNSFW);
+                        if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
+                            item.Barcodes.Add(barcode);
                         Thumbnails.Add(item);
                         return item;
                     }
@@ -245,6 +264,9 @@ namespace FLB_API.Managers
         public byte[] Image { get; set; } = image;
 
         public bool IsNSFW { get; set; } = isNSFW;
+
+        // Sometimes the levels do not have a mod id associated, this will be used to counter that
+        public List<string> Barcodes { get; set; } = [];
 
         public DateTimeOffset ExpireTime { get; set; } = expire;
     }
