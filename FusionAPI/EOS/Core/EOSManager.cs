@@ -44,9 +44,7 @@ internal class EOSManager : IDisposable
                 return false;
             }
 
-#if DEBUG
             ConfigureLogging();
-#endif
 
             StartTicker();
 
@@ -134,12 +132,7 @@ internal class EOSManager : IDisposable
     private void ConfigureLogging()
     {
         LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Info);
-        LoggingInterface.SetCallback((ref LogMessage message) =>
-        {
-#if DEBUG
-            _logger.Info($"[{Enum.GetName(typeof(LogLevel), message.Level)?.ToUpper() ?? "N/A"}] {message.Message}");
-#endif
-        });
+        LoggingInterface.SetCallback((ref LogMessage message) => _logger.Info($"[{Enum.GetName(typeof(LogLevel), message.Level)?.ToUpper() ?? "N/A"}] {message.Message}"));
     }
 
     private void StartTicker()
