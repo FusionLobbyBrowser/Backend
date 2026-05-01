@@ -98,6 +98,11 @@ namespace FLB_API.Managers
                             Program.Logger?.Information($"Found cached mod thumbnail for {barcode}");
                             return _item;
                         }
+                        else
+                        {
+                            Program.Logger?.Information($"Could not find a cached thumbnail for {barcode}");
+                            return null;
+                        }
                     }
 
                     var item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
