@@ -51,6 +51,4 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script: |
-            screen -dmS FLB
-            screen -S FLB -p 0 -X stuff '${{ secrets.SSH_BACKEND_LOCATION }}/FLB_API'
+          script: screen -dmS FLB bash -c '${{ secrets.SSH_BACKEND_LOCATION }}/FLB_API'
