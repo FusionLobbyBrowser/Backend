@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 using Epic.OnlineServices;
@@ -12,7 +13,7 @@ namespace FusionAPI
 {
     public class EOSHandler : IMatchmakingHandler
     {
-        private static bool EOSDllResolverConfigured { get; set; } = false;
+        private static bool DLLResolverConfigured { get; set; } = false;
 
         public bool IsInitialized => EOSManager?.IsInitialized ?? false;
 
@@ -25,6 +26,8 @@ namespace FusionAPI
         private DateTime _lastFetch = DateTime.Now;
 
         public DateTime LastFetch => _lastFetch;
+
+        private IntPtr EOSHandle { get; set; } = IntPtr.Zero;
 
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
@@ -179,61 +182,29 @@ namespace FusionAPI
             Logger = logger;
 
             var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string[] candidates;
+            string name;
 
             const string linuxFormat = "libEOSSDK-Linux{0}-Shipping.so";
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                if (RuntimeInformation.OSArchitecture == Architecture.Arm64)
-                {
-                    candidates = [
-                        string.Format(linuxFormat, "Arm64"),
-                        string.Format(linuxFormat, string.Empty),
-                                ];
-                }
-                else
-                {
-                    candidates = [string.Format(linuxFormat, string.Empty)];
-                }
-            }
+                name = string.Format(linuxFormat, IsARM() ? "Arm64" : string.Empty);
             else
+                name = "EOSSDK-Win64-Shipping.dll";
+
+            var path = Path.Combine(baseDirectory, name);
+            Logger.Info("Loading SDK from " + path);
+            EOSHandle = DllTools.LoadLibrary(path);
+
+            if (EOSHandle == IntPtr.Zero)
+                throw new DllNotFoundException($"Unable to load EOS SDK native library. Tried {name} in {baseDirectory}");
+
+            if (!DLLResolverConfigured)
             {
-                candidates = ["EOSSDK-Win64-Shipping.dll"];
+                SetDLLImportResolver();
+                DLLResolverConfigured = true;
             }
 
-            IntPtr handle = IntPtr.Zero;
-            string? loadedPath = null;
-
-            foreach (var candidate in candidates)
-            {
-                var path = Path.Combine(baseDirectory, candidate);
-                Logger.Info("Loading SDK from " + path);
-                handle = DllTools.LoadLibrary(path);
-                if (handle != IntPtr.Zero)
-                {
-                    loadedPath = path;
-                    break;
-                }
-            }
-
-            if (handle == IntPtr.Zero)
-                throw new DllNotFoundException($"Unable to load EOS SDK native library. Tried: {string.Join(", ", candidates)} in {baseDirectory}");
-
-            if (!EOSDllResolverConfigured)
-            {
-                NativeLibrary.SetDllImportResolver(typeof(Common).Assembly, (name, __, _) =>
-                {
-                    if (name.Contains("EOSSDK", StringComparison.OrdinalIgnoreCase))
-                        return handle;
-
-                    return IntPtr.Zero;
-                });
-
-                EOSDllResolverConfigured = true;
-            }
-
-            Logger.Info("EOS SDK loaded from " + loadedPath);
+            Logger.Info("EOS SDK loaded from " + path);
 
             AuthManager = new EOSAuthManager(logger);
             EOSManager = new EOSManager(AuthManager, logger);
@@ -245,6 +216,15 @@ namespace FusionAPI
             else
                 Logger.Error("EOS initialization failed.");
         }
+
+        private static bool IsARM()
+            => RuntimeInformation.OSArchitecture == Architecture.Arm64;
+
+        private void SetDLLImportResolver()
+            => NativeLibrary.SetDllImportResolver(typeof(Common).Assembly, ResolverCallback);
+
+        private IntPtr ResolverCallback(string name, Assembly assembly, DllImportSearchPath? path)
+            => name.Contains("EOSSDK", StringComparison.OrdinalIgnoreCase) ? EOSHandle : IntPtr.Zero;
 
         public bool IsFriend(string id)
             => false;
