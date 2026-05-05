@@ -1,0 +1,62 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: ["main"]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "deployment"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+            dotnet-version: 10.0.x
+      - name: Install Dependencies
+        run: dotnet restore
+      - name: Build Project
+        run: dotnet build --configuration Release --no-restore
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+            path: "./dist"
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: "ignorethislmao"
+      - name: Adding Known Hosts
+        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+      - name: Kill Backend
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: screen -XS FLB quit
+      - name: Deploy with rsync
+        run: rsync --exclude='settings.json' -avz –dry-run ./dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BACKEND_LOCATION }}
+      - name: Start Backend
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            screen -dmS FLB
+            screen -S FLB -p 0 -X stuff '${{ secrets.SSH_BACKEND_LOCATION }}/FLB_API'
