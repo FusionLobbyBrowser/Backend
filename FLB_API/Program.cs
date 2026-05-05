@@ -6,6 +6,8 @@ using FusionAPI;
 using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
+using Microsoft.AspNetCore.Mvc;
+
 using Serilog;
 using Serilog.Sinks.Spectre;
 
@@ -21,9 +23,11 @@ namespace FLB_API
 
         internal static Serilog.Core.Logger? Logger { get; private set; }
 
-        internal static LobbyInfo[]? SteamLobbies { get; private set; }
+        internal static Logger? SteamLogger { get; private set; }
 
-        internal static LobbyInfo[]? EOSLobbies { get; private set; }
+        internal static LobbyListResponse? SteamLobbies { get; private set; }
+
+        internal static LobbyListResponse? EOSLobbies { get; private set; }
 
         internal static DateTime Uptime { get; private set; }
 
@@ -109,8 +113,8 @@ namespace FLB_API
                 }
                 Handlers.Add(FusionClient.Handler);
 
-                var logger = new Logger(level, "Steam");
-                await FusionClient.Initialize(logger, metadata);
+                SteamLogger = new Logger(level, "Steam");
+                await FusionClient.Initialize(SteamLogger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
                 EOSClient = new Fusion(new EOSHandler());
                 var eosLogger = new Logger(level, "EOS");
@@ -259,8 +263,8 @@ namespace FLB_API
                 {
                     try
                     {
-                        SteamLobbies = await FusionClient.FetchLobbies("Steam");
-                        EOSLobbies = await EOSClient.FetchLobbies("EOS");
+                        SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch);
+                        EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], FusionClient.Handler.LastFetch);
                         LoadSettings();
                     }
                     catch (Exception e)
@@ -318,7 +322,7 @@ namespace FLB_API
                     ImapManager ??= new IMAPManager(
                         Settings!.IMAP!.Host!,
                         Settings.IMAP.Port,
-                        Logger
+                        SteamLogger
                         );
 
                     ImapManager.LogIn(Settings!.IMAP!.Username!, Settings!.IMAP!.Password!);
@@ -373,6 +377,16 @@ namespace FLB_API
             {
                 Logger?.Error(ex, "Failed to set settings from file");
             }
+        }
+
+        internal static ContentResult CreateResult(string message, int statusCode = 200, string contentType = "text/plain")
+        {
+            return new ContentResult()
+            {
+                StatusCode = statusCode,
+                Content = message,
+                ContentType = contentType
+            };
         }
     }
 }

@@ -15,21 +15,21 @@ namespace FLB_API.Controllers
             else if (service.Equals("Epic", StringComparison.OrdinalIgnoreCase))
                 serviceType = Service.Epic;
             else
-                return NotFound("The provided service does not exist. Choose from the following: Steam, Epic");
+                return Program.CreateResult("The provided service does not exist. Choose from the following: Steam, Epic", 400);
 
-            var handler = serviceType == Service.Steam ? Program.FusionClient?.Handler : Program.EOSClient?.Handler;
-            if (handler?.IsInitialized != true)
-                return StatusCode(500, $"Server is not connected to {Enum.GetName(serviceType)}.");
+            var handler = serviceType == Service.Steam ? Program.FusionClient : Program.EOSClient;
+            if (handler?.Handler.IsInitialized != true)
+                return Program.CreateResult($"Server is not connected to {Enum.GetName(serviceType)}.", 500);
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
 
-            if (serviceType == Service.Steam)
-                return Ok(new LobbyListResponse(Program.SteamLobbies ?? [], handler.LastFetch));
-            else if (serviceType == Service.Epic)
-                return Ok(new LobbyListResponse(Program.EOSLobbies ?? [], handler.LastFetch));
-            else
-                return NotFound("The provided service does not exist. Choose from the following: Steam, Epic");
+            var list = serviceType == Service.Steam ? Program.SteamLobbies : Program.EOSLobbies;
+
+            if (string.IsNullOrWhiteSpace(list?.JSON))
+                return Program.CreateResult("Did not fetch lobbies yet", 500);
+
+            return Program.CreateResult(list.JSON, contentType: "application/json");
         }
 
         public enum Service

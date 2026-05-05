@@ -12,22 +12,22 @@ namespace FLB_API.Controllers
         public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modId, [FromQuery(Name = "barcode")] string barcode = "")
         {
             if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
-                return BadRequest("modId is required.");
+                return Program.CreateResult("modId is required.", 400);
 
             if (!long.TryParse(modId, out long _modId) && string.IsNullOrWhiteSpace(barcode))
-                return BadRequest("modId is not valid.");
+                return Program.CreateResult("modId is not valid.", 400);
 
             MemoryThumbnail? thumbnail;
             try
             {
                 thumbnail = await ModIOManager.GetModThumbnail(_modId, barcode);
                 if (thumbnail == null)
-                    return NotFound("Thumbnail not found.");
+                    return Program.CreateResult("Thumbnail not found.", 404);
             }
             catch (Exception ex)
             {
                 Program.Logger?.Error(ex, $"Error fetching thumbnail for {modId}");
-                return StatusCode(500, "An error occurred while fetching the thumbnail");
+                return Program.CreateResult("An error occurred while fetching the thumbnail", 500);
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues(["ModIO-Maturity", "Server-Uptime"]);

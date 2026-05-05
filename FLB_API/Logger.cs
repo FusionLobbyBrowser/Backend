@@ -41,7 +41,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            Program.Logger?.Error($"{FormatPrefix()}{msg}");
+            Program.Logger?.Error(FormatPrefix() + msg);
         }
 
         public void Info(string message, params object[] args)
@@ -50,7 +50,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            Program.Logger?.Information($"{FormatPrefix()}{msg}");
+            Program.Logger?.Information(FormatPrefix() + msg);
         }
 
         public void Trace(string message, params object[] args)
@@ -59,7 +59,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            Program.Logger?.Verbose($"{FormatPrefix()}{msg}");
+            Program.Logger?.Verbose(FormatPrefix() + msg);
         }
 
         public void Warning(string message, params object[] args)
@@ -68,7 +68,7 @@ namespace FLB_API
                 return;
 
             var msg = string.Format(message, args);
-            Program.Logger?.Warning($"{FormatPrefix()}{msg}");
+            Program.Logger?.Warning(FormatPrefix() + msg);
         }
 
         private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $"[[{Prefix}]] " : string.Empty)}";
