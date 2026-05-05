@@ -356,7 +356,7 @@ namespace FLB_API
             try
             {
                 Logger?.Information("Loading settings...");
-                var path = Path.Combine(Directory.GetCurrentDirectory(), "settings.json");
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
                 if (!File.Exists(path))
                 {
                     Logger?.Information("Settings file is missing, creating new and exiting application...");
