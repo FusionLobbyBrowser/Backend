@@ -2,6 +2,8 @@
 {
     public interface IMatchmakingHandler
     {
+        public string ID { get; }
+
         public bool IsInitialized { get; }
 
         public DateTime LastFetch { get; }

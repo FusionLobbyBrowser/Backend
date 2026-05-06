@@ -29,6 +29,8 @@ namespace FusionAPI
 
         private IntPtr EOSHandle { get; set; } = IntPtr.Zero;
 
+        public string ID => "Epic";
+
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
             var options = new CreateLobbySearchOptions

@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-using FusionAPI.Data.Containers;
+﻿using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
 namespace FusionAPI
@@ -10,6 +8,8 @@ namespace FusionAPI
         public const uint AppID = 250820;
 
         public IMatchmakingHandler Handler { get; set; } = handler;
+
+        public Dictionary<string, long> LobbiesUptime { get; private set; } = [];
 
         public async Task Initialize(ILogger logger, Dictionary<string, string> metadata)
         {
@@ -34,22 +34,50 @@ namespace FusionAPI
 
                 var metadata = LobbyMetadataInfo.Read(lobby);
 
-                if (!metadata.HasLobbyOpen)
+                if (!ValidateLobby(metadata, includePrivate, includeFull))
                     continue;
 
-                if (!includePrivate && IsPrivate(metadata.LobbyInfo))
-                    continue;
+                long uptime;
+                if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out long value))
+                {
+                    var _uptime = DateTimeOffset.Now.ToUnixTimeSeconds();
+                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, _uptime);
+                    uptime = _uptime;
+                }
+                else
+                {
+                    uptime = value;
+                }
 
-                if (metadata.LobbyInfo == null)
-                    continue;
-
-                if (!includeFull && metadata.LobbyInfo.PlayerCount == metadata.LobbyInfo.MaxPlayers)
-                    continue;
+                metadata.LobbyInfo.LobbyUptime = uptime;
+                metadata.LobbyInfo.LobbyPlatform = Handler.ID;
 
                 netLobbies.Add(metadata.LobbyInfo);
             }
 
+            LobbiesUptime = LobbiesUptime.Where(y => netLobbies.Any(x => x.LobbyID == y.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+
             return [.. netLobbies];
+        }
+
+        private bool ValidateLobby(LobbyMetadataInfo? metadata, bool includePrivate, bool includeFull)
+        {
+            if (metadata == null)
+                return false;
+
+            if (!metadata.HasLobbyOpen)
+                return false;
+
+            if (!includePrivate && IsPrivate(metadata.LobbyInfo))
+                return false;
+
+            if (metadata.LobbyInfo == null)
+                return false;
+
+            if (!includeFull && metadata.LobbyInfo.PlayerCount == metadata.LobbyInfo.MaxPlayers)
+                return false;
+
+            return true;
         }
 
         public LobbyInfo[] FilterLobbies(LobbyInfo[] lobbies, bool includeFull = true, bool includePrivate = false)

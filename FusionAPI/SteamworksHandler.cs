@@ -16,6 +16,8 @@ namespace FusionAPI
 
         public DateTime LastFetch => _lastFetch;
 
+        public string ID => "Steam";
+
         public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
         {
             var lobbies = ConvertLobbies(await GetSteamLobbies(includePrivate));

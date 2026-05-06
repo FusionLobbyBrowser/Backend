@@ -24,6 +24,12 @@ public class LobbyInfo
     [JsonPropertyName("lobbyDescription")]
     public string? LobbyDescription { get; set; } = null;
 
+    [JsonPropertyName("lobbyPlatform")]
+    public string? LobbyPlatform { get; set; } = null;
+
+    [JsonPropertyName("lobbyUptime")]
+    public long LobbyUptime { get; set; } = -1;
+
     [JsonPropertyName("lobbyVersion")]
     public Version LobbyVersion { get; set; } = new();
 

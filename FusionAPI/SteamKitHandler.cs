@@ -41,6 +41,8 @@ namespace FusionAPI
 
         public DateTime LastFetch => _lastFetch;
 
+        public string ID => "Steam";
+
         public SteamKitHandler()
         {
             SteamClient = new SteamClient();
