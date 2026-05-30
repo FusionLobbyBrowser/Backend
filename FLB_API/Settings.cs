@@ -11,6 +11,9 @@ namespace FLB_API
         [JsonPropertyName("modio_token")]
         public string? ModIO_Token { get; set; }
 
+        [JsonPropertyName("steam_token")]
+        public string? SteamWebAPI_Token { get; set; }
+
         [JsonPropertyName("thumbnail_cache_expire_time")]
         public ulong? ThumbnailCacheExpireTime { get; set; } = 30 * 60;
 

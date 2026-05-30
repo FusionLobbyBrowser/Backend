@@ -1,12 +1,13 @@
 ﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace FLB_API.Managers
 {
-    public static class ModIOManager
+    public static partial class ModIOManager
     {
         private const int GAME_ID = 3809;
 
-        private readonly static List<MemoryThumbnail> Thumbnails = [];
+        internal readonly static List<MemoryThumbnail> Thumbnails = [];
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
@@ -86,7 +87,13 @@ namespace FLB_API.Managers
             if (string.IsNullOrWhiteSpace(barcode))
                 return null;
 
-            Program.Logger?.Information($"A barcode was only provided, trying to find an existing cache...");
+            if (!IsValidBarcode(barcode))
+            {
+                Program.Logger?.Information("An invalid barcode was provided! Barcode: " + barcode);
+                return null;
+            }
+
+            Program.Logger?.Information("A barcode was only provided, trying to find an existing cache...");
             var _item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
             // This ignores cache, as level without mod id is quite rare and theres a chance there will be another request to have a mod id associated
             if (_item != null)
@@ -101,6 +108,12 @@ namespace FLB_API.Managers
             }
         }
 
+        private static bool IsValidBarcode(string barcode)
+        {
+            var regex = BarcodeValidationRegex();
+            return regex.IsMatch(barcode);
+        }
+
         private static async Task<byte[]> GetImage(string url)
         {
             using HttpClient client = new();
@@ -108,6 +121,9 @@ namespace FLB_API.Managers
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsByteArrayAsync();
         }
+
+        [GeneratedRegex("^[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?$")]
+        private static partial Regex BarcodeValidationRegex();
     }
 
     public class RemoteThumbnailResponse(long modId, string thumbnailUrl, DateTimeOffset expire, bool isNSFW = false)
