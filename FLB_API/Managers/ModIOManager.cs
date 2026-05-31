@@ -7,7 +7,23 @@ namespace FLB_API.Managers
     {
         private const int GAME_ID = 3809;
 
-        internal readonly static List<MemoryThumbnail> Thumbnails = [];
+        internal readonly static List<MemoryThumbnail> Thumbnails = new(1000);
+
+        public static bool IsSetup { get; private set; } = false;
+
+        public static async Task Setup()
+        {
+            if (IsSetup) return;
+            IsSetup = true;
+
+            while (true)
+            {
+                await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
+                Program.Logger?.Information($"Starting cleanup process! Processing {Thumbnails.Count} thumbnails...");
+                int removed = Thumbnails.RemoveAll(x => !x.IsThumbnailValid());
+                Program.Logger?.Information($"Removed {removed} thumbnails!");
+            }
+        }
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
@@ -35,7 +51,7 @@ namespace FLB_API.Managers
             if (thumbnail is null || json.GetProperty("visible").GetInt16() == 0)
                 return null;
             else
-                return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60)), maturity);
+                return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60))), maturity);
         }
 
         public static async Task<MemoryThumbnail?> GetModThumbnail(long modId, string barcode = "")
@@ -49,7 +65,7 @@ namespace FLB_API.Managers
                 var item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
                 {
-                    if ((DateTimeOffset.Now - item.ExpireTime).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60))
+                    if (item.IsThumbnailValid())
                     {
                         Program.Logger?.Information($"Found cached mod thumbnail for {modId}");
                         if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
@@ -81,6 +97,9 @@ namespace FLB_API.Managers
                 return null;
             }
         }
+
+        private static bool IsThumbnailValid(this MemoryThumbnail item)
+            => (DateTimeOffset.Now - item.ExpireTime).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60));
 
         private static MemoryThumbnail? GetWithBarcode(string? barcode)
         {
@@ -122,7 +141,7 @@ namespace FLB_API.Managers
             return await response.Content.ReadAsByteArrayAsync();
         }
 
-        [GeneratedRegex("^[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?\\.[a-zA-Z]{1,}?$")]
+        [GeneratedRegex(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")]
         private static partial Regex BarcodeValidationRegex();
     }
 

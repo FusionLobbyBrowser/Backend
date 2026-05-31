@@ -17,6 +17,8 @@ namespace FLB_API.Controllers.Steam
     {
         private const int CacheTime = 60 * 30;
 
+        private static HttpClient HttpClient { get; } = new();
+
         private static List<ProfileCache> Cache { get; } = [];
 
         [HttpGet(Name = "GetSteamProfile")]
@@ -45,7 +47,7 @@ namespace FLB_API.Controllers.Steam
             }
 
             var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebAPI_Token);
-            var user = factory.CreateSteamWebInterface<SteamUser>(new HttpClient());
+            var user = factory.CreateSteamWebInterface<SteamUser>(HttpClient);
 
             var summaries = await user.GetPlayerSummariesAsync([id]);
             var profile = summaries.Data.FirstOrDefault();

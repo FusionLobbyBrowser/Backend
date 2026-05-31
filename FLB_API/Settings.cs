@@ -17,6 +17,9 @@ namespace FLB_API
         [JsonPropertyName("thumbnail_cache_expire_time")]
         public ulong? ThumbnailCacheExpireTime { get; set; } = 30 * 60;
 
+        [JsonPropertyName("thumbnail_cleanup_interval")]
+        public int? ThumbnailCleanupInterval { get; set; } = 60 * 60;
+
         [JsonPropertyName("preferences")]
         public Preferences? Preferences { get; set; } = new();
 

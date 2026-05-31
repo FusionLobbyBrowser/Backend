@@ -160,6 +160,8 @@ namespace FLB_API
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
 
+            _ = ModIOManager.Setup();
+
             await app.RunAsync();
 
             await token.CancelAsync();
