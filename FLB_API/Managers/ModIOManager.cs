@@ -136,23 +136,42 @@ namespace FLB_API.Managers
             return regex.IsMatch(barcode);
         }
 
-        private static async Task<byte[]> GetImage(string url)
+        private static async Task<Stream> GetImage(string url)
         {
             using HttpClient client = new();
-            using var response = await client.GetAsync(url);
+            var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();
             var bytes = await response.Content.ReadAsStreamAsync();
-            var img = await Image.LoadAsync(bytes);
-            img.Mutate(x =>
-                x.Resize(new ResizeOptions()
+            const long min = (1 * 1000 * 1000);
+            if ((response.Content.Headers.ContentLength > min) || bytes.Length > min)
+            {
+                bytes.Position = 0;
+                var img = await Image.LoadAsync(bytes);
+                if (img.Width > 320 || img.Height > 180)
                 {
-                    Size = new Size(320, 180),
-                    Mode = ResizeMode.Max
-                })
-            );
-            var stream = new MemoryStream();
-            await img.SaveAsPngAsync(stream);
-            return stream.ToArray();
+                    img.Mutate(x =>
+                        x.Resize(new ResizeOptions()
+                        {
+                            Size = new Size(320, 180),
+                            Mode = ResizeMode.Max
+                        })
+                    );
+                    var stream = new MemoryStream();
+                    await img.SaveAsPngAsync(stream);
+                    await bytes.DisposeAsync();
+                    stream.Position = 0;
+                    return stream;
+                }
+                else
+                {
+                    bytes.Position = 0;
+                    return bytes;
+                }
+            }
+            else
+            {
+                return bytes;
+            }
         }
 
         [GeneratedRegex(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")]
@@ -169,10 +188,10 @@ namespace FLB_API.Managers
         public DateTimeOffset ExpireTime { get; set; } = expire;
     }
 
-    public class MemoryThumbnail(long modId, byte[] image, DateTimeOffset expire, bool isNSFW = false)
+    public sealed class MemoryThumbnail(long modId, Stream image, DateTimeOffset expire, bool isNSFW = false) : IDisposable
     {
         public long ModId { get; set; } = modId;
-        public byte[] Image { get; set; } = image;
+        public Stream Image { get; set; } = image;
 
         public bool IsNSFW { get; set; } = isNSFW;
 
@@ -180,5 +199,13 @@ namespace FLB_API.Managers
         public List<string> Barcodes { get; set; } = [];
 
         public DateTimeOffset ExpireTime { get; set; } = expire;
+
+        public void Dispose()
+        {
+            Image?.Dispose();
+            ModId = -1;
+            Barcodes.Clear();
+            GC.SuppressFinalize(this);
+        }
     }
 }

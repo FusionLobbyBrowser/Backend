@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace FLB_API.Controllers
 {
@@ -35,6 +36,9 @@ namespace FLB_API.Controllers
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
+            var serviceCollection = new ServiceCollection();
+            serviceCollection.AddMvcCore();
+            serviceCollection.AddSingleton<IActionResultExecutor<FileStreamResult>, FileStreamResultExecutor>();
 
             LobbyListResponse? list;
             if (serviceType == Service.Steam)

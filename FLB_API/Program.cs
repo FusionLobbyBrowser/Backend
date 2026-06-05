@@ -7,6 +7,7 @@ using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 using Serilog;
 using Serilog.Sinks.Spectre;
@@ -139,6 +140,7 @@ namespace FLB_API
             builder.Services.AddControllers();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
+            builder.Services.AddSingleton<IActionResultExecutor<FLB_API.Controllers.FileStreamResult>, FLB_API.Controllers.FileStreamResultExecutor>();
 
             var app = builder.Build();
 
