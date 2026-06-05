@@ -1,6 +1,9 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+
 namespace FLB_API.Managers
 {
     public static partial class ModIOManager
@@ -138,7 +141,18 @@ namespace FLB_API.Managers
             using HttpClient client = new();
             using var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsByteArrayAsync();
+            var bytes = await response.Content.ReadAsStreamAsync();
+            var img = await Image.LoadAsync(bytes);
+            img.Mutate(x =>
+                x.Resize(new ResizeOptions()
+                {
+                    Size = new Size(320, 180),
+                    Mode = ResizeMode.Max
+                })
+            );
+            var stream = new MemoryStream();
+            await img.SaveAsPngAsync(stream);
+            return stream.ToArray();
         }
 
         [GeneratedRegex(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")]
