@@ -51,7 +51,7 @@ namespace FLB_API.Managers
             if (json.TryGetProperty("logo", out var logoElement))
                 thumbnail = logoElement.GetProperty("thumb_320x180").GetString();
 
-            if (thumbnail is null || json.GetProperty("visible").GetInt16() == 0)
+            if (thumbnail is null)
                 return null;
             else
                 return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60))), maturity);
