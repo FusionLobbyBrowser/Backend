@@ -102,7 +102,7 @@ namespace FLB_API.Managers
         }
 
         private static bool IsThumbnailValid(this MemoryThumbnail item)
-            => (DateTimeOffset.Now - item.ExpireTime).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60));
+            => item.ExpireTime == null || (DateTimeOffset.Now - item.ExpireTime.Value).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60));
 
         private static MemoryThumbnail? GetWithBarcode(string? barcode)
         {
@@ -178,17 +178,17 @@ namespace FLB_API.Managers
         private static partial Regex BarcodeValidationRegex();
     }
 
-    public class RemoteThumbnailResponse(long modId, string thumbnailUrl, DateTimeOffset expire, bool isNSFW = false)
+    public class RemoteThumbnailResponse(long modId, string thumbnailUrl, DateTimeOffset? expire, bool isNSFW = false)
     {
         public long ModId { get; set; } = modId;
         public string ThumbnailUrl { get; set; } = thumbnailUrl;
 
         public bool IsNSFW { get; set; } = isNSFW;
 
-        public DateTimeOffset ExpireTime { get; set; } = expire;
+        public DateTimeOffset? ExpireTime { get; set; } = expire;
     }
 
-    public sealed class MemoryThumbnail(long modId, Stream image, DateTimeOffset expire, bool isNSFW = false) : IDisposable
+    public sealed class MemoryThumbnail(long modId, Stream image, DateTimeOffset? expire, bool isNSFW = false) : IDisposable
     {
         public long ModId { get; set; } = modId;
         public Stream Image { get; set; } = image;
@@ -198,7 +198,7 @@ namespace FLB_API.Managers
         // Sometimes the levels do not have a mod id associated, this will be used to counter that
         public List<string> Barcodes { get; set; } = [];
 
-        public DateTimeOffset ExpireTime { get; set; } = expire;
+        public DateTimeOffset? ExpireTime { get; set; } = expire;
 
         public void Dispose()
         {

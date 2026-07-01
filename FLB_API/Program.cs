@@ -270,16 +270,16 @@ namespace FLB_API
                     try
                     {
                         if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
-                            SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch);
+                            SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch, Settings?.Interval ?? 30);
                         else
                             Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
 
                         if (EOSClient != null && EOSClient.Handler?.IsInitialized == true)
-                            EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch);
+                            EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch, Settings?.Interval ?? 30);
                         else
                             Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
 
-                        Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime);
+                        Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
                         LoadSettings();
                     }

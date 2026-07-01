@@ -24,7 +24,9 @@
 	<ItemGroup>
 		<PackageReference Include="Facepunch.Steamworks" Version="2.3.3" />
 		<PackageReference Include="Facepunch.Steamworks.Library" Version="2.3.3" />
+		<PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
 		<PackageReference Include="SteamKit2" Version="3.4.0" />
+		<PackageReference Include="SteamWebAPI2" Version="5.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

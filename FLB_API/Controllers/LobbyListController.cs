@@ -7,24 +7,24 @@ namespace FLB_API.Controllers
     [Route("[controller]")]
     public class LobbyListController : ControllerBase
     {
-        [HttpGet(Name = "GetServers")]
-        public IActionResult Get([FromQuery(Name = "service")] string service = "")
+        [HttpGet(Name = "GetLobbies")]
+        public IActionResult Get([FromQuery(Name = "platform")] string platform = "")
         {
-            Service serviceType;
-            if (service.Equals("Steam", StringComparison.OrdinalIgnoreCase))
-                serviceType = Service.Steam;
-            else if (service.Equals("Epic", StringComparison.OrdinalIgnoreCase))
-                serviceType = Service.Epic;
-            else if (string.IsNullOrWhiteSpace(service))
-                serviceType = Service.Combine;
+            Platform platformType;
+            if (platform.Equals("Steam", StringComparison.OrdinalIgnoreCase))
+                platformType = Platform.Steam;
+            else if (platform.Equals("Epic", StringComparison.OrdinalIgnoreCase))
+                platformType = Platform.Epic;
+            else if (string.IsNullOrWhiteSpace(platform))
+                platformType = Platform.Combine;
             else
-                return Program.CreateResult("The provided service does not exist. Leave empty to combine from all available services or choose from the following: Steam, Epic", 400);
+                return Program.CreateResult("The provided platform does not exist. Leave empty to combine from all available platforms or choose from the following: Steam, Epic", 400);
 
-            if (serviceType != Service.Steam)
+            if (platformType != Platform.Steam)
             {
-                var handler = serviceType == Service.Steam ? Program.FusionClient : Program.EOSClient;
+                var handler = platformType == Platform.Steam ? Program.FusionClient : Program.EOSClient;
                 if (handler?.Handler.IsInitialized != true)
-                    return Program.CreateResult($"Server is not connected to {Enum.GetName(serviceType)}.", 500);
+                    return Program.CreateResult($"Server is not connected to {Enum.GetName(platformType)}.", 500);
             }
             else
             {
@@ -41,9 +41,9 @@ namespace FLB_API.Controllers
             serviceCollection.AddSingleton<IActionResultExecutor<FileStreamResult>, FileStreamResultExecutor>();
 
             LobbyListResponse? list;
-            if (serviceType == Service.Steam)
+            if (platformType == Platform.Steam)
                 list = Program.SteamLobbies;
-            else if (serviceType == Service.Epic)
+            else if (platformType == Platform.Epic)
                 list = Program.EOSLobbies;
             else
                 list = Program.Lobbies;
@@ -54,7 +54,7 @@ namespace FLB_API.Controllers
             return Program.CreateResult(list.JSON, contentType: "application/json");
         }
 
-        public enum Service
+        public enum Platform
         {
             Steam,
             Epic,

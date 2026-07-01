@@ -9,18 +9,23 @@ namespace FLB_API
     public class LobbyListResponse
     {
         [JsonIgnore]
-        public string JSON { get; }
+        public string JSON { get; set; }
 
-        public LobbyInfo[] Lobbies { get; }
+        [JsonPropertyName("lobbies")]
+        public LobbyInfo[] Lobbies { get; set; }
 
-        public long Date { get; }
+        [JsonPropertyName("date")]
+        public long Date { get; set; }
 
-        public int Interval { get; } = Program.Settings?.Interval ?? 30;
+        [JsonPropertyName("interval")]
+        public int Interval { get; set; }
 
-        public LobbyListResponse(LobbyInfo[] lobbies, DateTime date)
+        [JsonConstructor]
+        public LobbyListResponse(LobbyInfo[] lobbies, DateTime date, int interval = 30)
         {
             Lobbies = lobbies;
             Date = ((DateTimeOffset)date).ToUnixTimeSeconds();
+            Interval = interval;
             JSON = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
     }
