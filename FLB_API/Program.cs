@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
+using FLB_API.Discord;
 using FLB_API.Managers;
 
 using FusionAPI;
@@ -140,7 +142,6 @@ namespace FLB_API
             builder.Services.AddControllers();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
-            builder.Services.AddSingleton<IActionResultExecutor<FLB_API.Controllers.FileStreamResult>, FLB_API.Controllers.FileStreamResultExecutor>();
 
             var app = builder.Build();
 
@@ -169,6 +170,9 @@ namespace FLB_API
             await token.CancelAsync();
             token.Dispose();
         }
+
+        public static string ReplaceRegex(this string text, string pattern, string replacement)
+            => Regex.Replace(text, pattern, replacement);
 
         private static async Task<Dictionary<string, string>> SetupSteamKit()
         {
@@ -281,6 +285,18 @@ namespace FLB_API
 
                         Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
+                        if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
+                        {
+                            await DiscordBotManager.Status();
+                        }
+                        else
+                        {
+                            if (Settings?.Preferences?.LaunchDiscordBot == true)
+                            {
+                                Program.Logger?.Information("Setting up discord bot");
+                                _ = DiscordBotManager.Setup();
+                            }
+                        }
                         LoadSettings();
                     }
                     catch (Exception e)

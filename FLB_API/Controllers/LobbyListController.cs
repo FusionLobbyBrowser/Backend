@@ -16,11 +16,11 @@ namespace FLB_API.Controllers
             else if (platform.Equals("Epic", StringComparison.OrdinalIgnoreCase))
                 platformType = Platform.Epic;
             else if (string.IsNullOrWhiteSpace(platform))
-                platformType = Platform.Combine;
+                platformType = Platform.All;
             else
                 return Program.CreateResult("The provided platform does not exist. Leave empty to combine from all available platforms or choose from the following: Steam, Epic", 400);
 
-            if (platformType != Platform.Steam)
+            if (platformType != Platform.All)
             {
                 var handler = platformType == Platform.Steam ? Program.FusionClient : Program.EOSClient;
                 if (handler?.Handler.IsInitialized != true)
@@ -36,9 +36,6 @@ namespace FLB_API.Controllers
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
-            var serviceCollection = new ServiceCollection();
-            serviceCollection.AddMvcCore();
-            serviceCollection.AddSingleton<IActionResultExecutor<FileStreamResult>, FileStreamResultExecutor>();
 
             LobbyListResponse? list;
             if (platformType == Platform.Steam)
@@ -56,9 +53,9 @@ namespace FLB_API.Controllers
 
         public enum Platform
         {
+            All,
             Steam,
-            Epic,
-            Combine
+            Epic
         }
     }
 }
