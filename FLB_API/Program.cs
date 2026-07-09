@@ -147,11 +147,16 @@ namespace FLB_API
                     options.Cookie.Name = "SteamAuth";
                     options.LoginPath = "/steam/login";
                     options.LogoutPath = "/steam/logout";
+
+                    options.Events.OnRedirectToLogin = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    };
                 })
                 .AddSteam(options => options.ApplicationKey = Settings?.SteamWebAPI_Token);
 
             builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
             builder.Services.AddSingleton<IActionResultExecutor<FLB_API.Controllers.FileStreamResult>, FLB_API.Controllers.FileStreamResultExecutor>();
 

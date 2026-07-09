@@ -17,7 +17,7 @@ namespace FLB_API.Controllers.Steam
     {
         private const int CacheTime = 60 * 30;
 
-        private static HttpClient HttpClient { get; } = new();
+        internal static HttpClient HttpClient { get; } = new();
 
         private static List<ProfileCache> Cache { get; } = [];
 
@@ -30,20 +30,22 @@ namespace FLB_API.Controllers.Steam
             if (!ulong.TryParse(steamId, out ulong id))
                 return Program.CreateResult("Invalid Steam ID! ", 400);
 
+            var profile = await GetProfile(id);
+            if (profile?.Profile == null)
+                return Program.CreateResult("Steam API returned no profile for such ID!", 400);
+
+            return Ok(profile.ProfileJSON);
+        }
+
+        public static async Task<ProfileCache?> GetProfile(ulong id)
+        {
             var cache = Cache.FirstOrDefault(x => x.Profile?.SteamId == id);
             if (cache?.Profile != null)
             {
                 if ((DateTimeOffset.Now - cache.Start).TotalSeconds > CacheTime)
-                {
                     Cache.Remove(cache);
-                }
                 else
-                {
-                    return
-                        !string.IsNullOrWhiteSpace(cache.ProfileJSON) ?
-                        Program.CreateResult(cache.ProfileJSON, contentType: "application/json")
-                        : Ok(cache.Profile);
-                }
+                    return cache;
             }
 
             var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebAPI_Token);
@@ -52,10 +54,11 @@ namespace FLB_API.Controllers.Steam
             var summaries = await user.GetPlayerSummariesAsync([id]);
             var profile = summaries.Data.FirstOrDefault();
             if (profile == null)
-                return Program.CreateResult("Steam API returned no profile for such ID!", 400);
+                return null;
 
-            Cache.Add(new(profile));
-            return Ok(profile);
+            var cached = new ProfileCache(profile);
+            Cache.Add(cached);
+            return cached;
         }
     }
 
