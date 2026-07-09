@@ -15,7 +15,7 @@ namespace FLB_API.Controllers.Steam
     [Route("steam/profile/{steamId}")]
     public class ProfileController : ControllerBase
     {
-        private const int CacheTime = 60 * 30;
+        private const float CacheTime = 60 * 0.5f;
 
         internal static HttpClient HttpClient { get; } = new();
 

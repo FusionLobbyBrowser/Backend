@@ -14,7 +14,7 @@ namespace FLB_API.Controllers.Steam
     [Route("steam/friends/{steamId}")]
     public class FriendsController : ControllerBase
     {
-        private const int CacheTime = 60 * 30;
+        private const float CacheTime = 60 * 0.5f;
 
         private static Dictionary<ulong, FriendsCache> Cache { get; } = [];
 
