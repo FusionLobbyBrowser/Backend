@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FLB_API.Controllers.Steam
 {
     [ApiController]
-    [Route("steam/profile/{steamId}")]
+    [Route("steam")]
     public class AuthorizationController : ControllerBase
     {
         [HttpGet("login"), HttpPost("login")]
