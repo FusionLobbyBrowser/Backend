@@ -144,6 +144,7 @@ namespace FLB_API
                 {
                     options.Cookie.SameSite = SameSiteMode.None;
                     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    options.Cookie.Name = "SteamAuth";
                     options.LoginPath = "/steam/login";
                     options.LogoutPath = "/steam/logout";
                 })
