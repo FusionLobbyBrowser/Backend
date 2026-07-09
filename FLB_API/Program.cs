@@ -6,6 +6,7 @@ using FusionAPI;
 using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 
@@ -137,6 +138,17 @@ namespace FLB_API
             builder.Logging.ClearProviders();
             builder.Logging.AddSerilog(Logger);
 
+            builder.Services
+                .AddAuthentication(options => options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(options =>
+                {
+                    options.Cookie.SameSite = SameSiteMode.None;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    options.LoginPath = "/steam/login";
+                    options.LogoutPath = "/steam/logout";
+                })
+                .AddSteam(options => options.ApplicationKey = Settings?.SteamWebAPI_Token);
+
             builder.Services.AddControllers();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
@@ -144,18 +156,21 @@ namespace FLB_API
 
             var app = builder.Build();
 
+            app.UseHttpsRedirection();
             app.UseCors((builder) =>
                 builder
-                    .AllowAnyOrigin()
+                    .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
+                    .AllowCredentials()
             );
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
                 app.MapOpenApi();
 
-            app.UseHttpsRedirection();
+            app.UseAuthentication();
+            app.UseAuthorization();
 
             app.MapControllers();
 
