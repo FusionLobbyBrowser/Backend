@@ -13,7 +13,7 @@ namespace FLB_API.Controllers.Steam
     {
         [HttpGet("login"), HttpPost("login")]
         public async Task<IActionResult> SignIn([FromQuery(Name = "redirectURL")] string redirectURL = "")
-            => Challenge(new AuthenticationProperties { RedirectUri = (string.IsNullOrWhiteSpace(redirectURL) ? "https://fusion.hahoos.dev/" : redirectURL) }, "Steam");
+            => Challenge(new AuthenticationProperties { RedirectUri = (string.IsNullOrWhiteSpace(redirectURL) ? "https://fusion.hahoos.dev/" : redirectURL), IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddYears(1) }, "Steam");
 
         [HttpGet("logout"), HttpPost("logout")]
         public IActionResult SignOutCurrentUser([FromQuery(Name = "redirectURL")] string redirectURL = "")
