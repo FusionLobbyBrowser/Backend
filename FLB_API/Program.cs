@@ -168,7 +168,8 @@ namespace FLB_API
             app.UseHttpsRedirection();
             app.UseCors((builder) =>
                 builder
-                    .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com")
+                    //.WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com")
+                    .AllowAnyOrigin() // this is only for testing, im gonna change this!!
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials()
