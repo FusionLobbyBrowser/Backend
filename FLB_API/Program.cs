@@ -142,8 +142,11 @@ namespace FLB_API
                 .AddAuthentication(options => options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme)
                 .AddCookie(options =>
                 {
+                    options.Cookie.HttpOnly = true;
                     options.Cookie.SameSite = SameSiteMode.None;
                     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+                    options.SlidingExpiration = true;
                     options.Cookie.Name = "SteamAuth";
                     options.LoginPath = "/steam/login";
                     options.LogoutPath = "/steam/logout";
