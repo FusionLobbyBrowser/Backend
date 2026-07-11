@@ -27,19 +27,19 @@ namespace FLB_API.Controllers.Steam
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebAPI_Token))
                 return Program.CreateResult("Backend is not set up for using Steam API!", 500);
 
-            if (!ulong.TryParse(steamId, out ulong _))
+            if (!ulong.TryParse(steamId, out ulong id))
                 return Program.CreateResult("Invalid Steam ID! ", 400);
 
-            var profile = await GetProfile(steamId);
+            var profile = await GetProfile(id);
             if (profile?.Profile == null)
                 return Program.CreateResult("Steam API returned no profile for such ID!", 400);
 
             return Ok(profile.ProfileJSON);
         }
 
-        public static async Task<ProfileCache?> GetProfile(string id)
+        public static async Task<ProfileCache?> GetProfile(ulong id)
         {
-            var cache = Cache.FirstOrDefault(x => x.Profile?.SteamId == id);
+            var cache = Cache.FirstOrDefault(x => x.Profile?.SteamId == id.ToString());
             if (cache?.Profile != null)
             {
                 if ((DateTimeOffset.Now - cache.Start).TotalSeconds > CacheTime)
