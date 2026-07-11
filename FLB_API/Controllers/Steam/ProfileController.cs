@@ -27,17 +27,17 @@ namespace FLB_API.Controllers.Steam
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebAPI_Token))
                 return Program.CreateResult("Backend is not set up for using Steam API!", 500);
 
-            if (!ulong.TryParse(steamId, out ulong id))
+            if (!ulong.TryParse(steamId, out ulong _))
                 return Program.CreateResult("Invalid Steam ID! ", 400);
 
-            var profile = await GetProfile(id);
+            var profile = await GetProfile(steamId);
             if (profile?.Profile == null)
                 return Program.CreateResult("Steam API returned no profile for such ID!", 400);
 
             return Ok(profile.ProfileJSON);
         }
 
-        public static async Task<ProfileCache?> GetProfile(ulong id)
+        public static async Task<ProfileCache?> GetProfile(string id)
         {
             var cache = Cache.FirstOrDefault(x => x.Profile?.SteamId == id);
             if (cache?.Profile != null)
@@ -66,7 +66,7 @@ namespace FLB_API.Controllers.Steam
     {
         public string? ProfileJSON { get; private set; }
 
-        public PlayerSummaryModel? Profile
+        public JSONPlayerSummaryModel? Profile
         {
             get;
             set
@@ -78,10 +78,53 @@ namespace FLB_API.Controllers.Steam
 
         public ProfileCache(PlayerSummaryModel profile)
         {
-            Profile = profile;
+            Profile = new(profile);
             Start = DateTimeOffset.Now;
         }
 
         public DateTimeOffset Start { get; }
+    }
+
+    public class JSONPlayerSummaryModel(PlayerSummaryModel summary)
+    {
+        public string SteamId { get; set; } = summary.SteamId.ToString();
+
+        public ProfileVisibility ProfileVisibility { get; set; } = summary.ProfileVisibility;
+
+        public uint ProfileState { get; set; } = summary.ProfileState;
+
+        public string Nickname { get; set; } = summary.Nickname;
+
+        public DateTime LastLoggedOffDate { get; set; } = summary.LastLoggedOffDate;
+
+        public CommentPermission CommentPermission { get; set; } = summary.CommentPermission;
+
+        public string ProfileUrl { get; set; } = summary.ProfileUrl;
+
+        public string AvatarUrl { get; set; } = summary.AvatarUrl;
+
+        public string AvatarMediumUrl { get; set; } = summary.AvatarMediumUrl;
+
+        public string AvatarFullUrl { get; set; } = summary.AvatarFullUrl;
+
+        public UserStatus UserStatus { get; set; } = summary.UserStatus;
+
+        public string RealName { get; set; } = summary.RealName;
+
+        public string PrimaryGroupId { get; set; } = summary.PrimaryGroupId;
+
+        public DateTime AccountCreatedDate { get; set; } = summary.AccountCreatedDate;
+
+        public string CountryCode { get; set; } = summary.CountryCode;
+
+        public string StateCode { get; set; } = summary.StateCode;
+
+        public uint CityCode { get; set; } = summary.CityCode;
+
+        public string PlayingGameName { get; set; } = summary.PlayingGameName;
+
+        public string PlayingGameId { get; set; } = summary.PlayingGameId;
+
+        public string PlayingGameServerIP { get; set; } = summary.PlayingGameServerIP;
     }
 }

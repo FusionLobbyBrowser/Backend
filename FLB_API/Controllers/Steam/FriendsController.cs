@@ -76,7 +76,7 @@ namespace FLB_API.Controllers.Steam
     {
         public string? FriendsJSON { get; private set; }
 
-        public List<PlayerSummaryModel>? Friends
+        public List<JSONPlayerSummaryModel>? Friends
         {
             get;
             set
@@ -88,7 +88,7 @@ namespace FLB_API.Controllers.Steam
 
         public FriendsCache(List<PlayerSummaryModel> friends)
         {
-            Friends = friends;
+            Friends = friends?.ConvertAll(x=>new JSONPlayerSummaryModel(x));
             Start = DateTimeOffset.Now;
         }
 
