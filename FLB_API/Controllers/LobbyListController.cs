@@ -11,7 +11,7 @@ namespace FLB_API.Controllers
     public class LobbyListController : ControllerBase
     {
         [HttpGet(Name = "GetPublicLobbies")]
-        public IActionResult GetPublicLobbies([FromQuery(Name = "platform")] string platform = "")
+        public async Task<IActionResult> GetPublicLobbies([FromQuery(Name = "platform")] string platform = "", [FromQuery(Name = "includeFriendsOnly")] bool friendsOnly = true)
         {
             Platform platformType;
             if (platform.Equals("Steam", StringComparison.OrdinalIgnoreCase))
@@ -54,40 +54,36 @@ namespace FLB_API.Controllers
             if (string.IsNullOrWhiteSpace(list?.JSON))
                 return Program.CreateResult("Did not fetch lobbies yet", 500);
 
-            return Program.CreateResult(list.JSON, contentType: "application/json");
-        }
-
-        [HttpGet("friendsonly",Name = "GetFriendsOnlyLobbies")]
-        [Authorize]
-        public async Task<IActionResult> GetFriendsOnly()
-        {
-            var self = User.GetSteamID();
-            if (self == -1)
-                return Program.CreateResult("Not authorized!", 401);
-
-            if (string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
-                return Program.CreateResult("Did not fetch lobbies yet", 500);
-
-            LobbyInfo[] copy = (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone();
-
-            FriendsCache? friends;
-            try
+            if (friendsOnly)
             {
-                friends = await FriendsController.GetFriends((ulong)self);
+                var self = User.GetSteamID();
+                if (self != -1)
+                {
+                    if (string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
+                        return Program.CreateResult("Did not fetch lobbies yet", 500);
+
+                    List<LobbyInfo> copy = (List<LobbyInfo>)Program.FriendsOnlyLobbies.Lobbies.Clone();
+
+                    FriendsCache? friends;
+                    try
+                    {
+                        friends = await FriendsController.GetFriends((ulong)self);
+                    }
+                    catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        return Program.CreateResult("The user has the friends list private!", 401);
+                    }
+
+                    if (friends?.Friends == null)
+                        return Program.CreateResult("Steam API returned no friends for such ID!", 400);
+
+                    copy = [.. copy.Where(l => friends.Friends.Any(x => x.SteamId == l.LobbyID))];
+                    copy.AddRange(list.Lobbies);
+
+                    list = new LobbyListResponse([.. copy],
+            DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval);
+                }
             }
-            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                return Program.CreateResult("The user has the friends list private!", 401);
-            }
-
-            if (friends?.Friends == null)
-                return Program.CreateResult("Steam API returned no friends for such ID!", 400);
-
-            copy = [.. copy.Where(l => friends.Friends.Any(x=>x.SteamId==l.LobbyID))];
-
-            var list = new LobbyListResponse(copy,
-    DateTimeOffset.FromUnixTimeSeconds(Program.FriendsOnlyLobbies.Date).DateTime, Program.FriendsOnlyLobbies.Interval);
-
 
             return Program.CreateResult(list.JSON, contentType: "application/json");
         }
