@@ -57,7 +57,7 @@ namespace FLB_API.Controllers
                 var self = User.GetSteamID();
                 if (self != -1 && !string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
                 {
-                    List<LobbyInfo> copy = (List<LobbyInfo>)Program.FriendsOnlyLobbies.Lobbies.Clone();
+                    List<LobbyInfo> copy = [.. (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];
 
                     FriendsCache? friends = null;
                     try
