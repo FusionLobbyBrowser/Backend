@@ -11,7 +11,6 @@ namespace FLB_API.Controllers
     public class LobbyListController : ControllerBase
     {
         [HttpGet(Name = "GetPublicLobbies")]
-        [Route("[controller]")]
         public IActionResult GetPublicLobbies([FromQuery(Name = "platform")] string platform = "")
         {
             Platform platformType;
@@ -58,8 +57,7 @@ namespace FLB_API.Controllers
             return Program.CreateResult(list.JSON, contentType: "application/json");
         }
 
-        [HttpGet(Name = "GetFriendsOnlyLobbies")]
-        [Route("[controller]/friendsonly")]
+        [HttpGet("friendsonly",Name = "GetFriendsOnlyLobbies")]
         [Authorize]
         public async Task<IActionResult> GetFriendsOnly()
         {
