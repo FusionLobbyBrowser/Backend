@@ -2,7 +2,6 @@ using FLB_API.Controllers.Steam;
 using FusionAPI.Data.Containers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace FLB_API.Controllers
 {
@@ -11,6 +10,8 @@ namespace FLB_API.Controllers
     public class LobbyListController : ControllerBase
     {
         [HttpGet(Name = "GetPublicLobbies")]
+        [Authorize]
+        [AllowAnonymous]
         public async Task<IActionResult> GetPublicLobbies([FromQuery(Name = "platform")] string platform = "", [FromQuery(Name = "includeFriendsOnly")] bool friendsOnly = true)
         {
             Platform platformType;
@@ -39,9 +40,6 @@ namespace FLB_API.Controllers
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
-            var serviceCollection = new ServiceCollection();
-            serviceCollection.AddMvcCore();
-            serviceCollection.AddSingleton<IActionResultExecutor<FileStreamResult>, FileStreamResultExecutor>();
 
             LobbyListResponse? list;
             if (platformType == Platform.Steam)
@@ -57,31 +55,30 @@ namespace FLB_API.Controllers
             if (friendsOnly)
             {
                 var self = User.GetSteamID();
-                if (self != -1)
+                if (self != -1 && !string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
                 {
-                    if (string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
-                        return Program.CreateResult("Did not fetch lobbies yet", 500);
-
                     List<LobbyInfo> copy = (List<LobbyInfo>)Program.FriendsOnlyLobbies.Lobbies.Clone();
 
-                    FriendsCache? friends;
+                    FriendsCache? friends = null;
                     try
                     {
                         friends = await FriendsController.GetFriends((ulong)self);
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
-                        return Program.CreateResult("The user has the friends list private!", 401);
+                        Program.Logger?.Warning("User has friends list private! Cannot fetch friends only lobbies");
                     }
 
-                    if (friends?.Friends == null)
-                        return Program.CreateResult("Steam API returned no friends for such ID!", 400);
+                    if (friends?.Friends != null)
+                    {
 
-                    copy = [.. copy.Where(l => friends.Friends.Any(x => x.SteamId == l.LobbyID))];
-                    copy.AddRange(list.Lobbies);
 
-                    list = new LobbyListResponse([.. copy],
-            DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval);
+                        copy = [.. copy.Where(l => friends.Friends.Any(x => x.SteamId == l.LobbyID))];
+                        copy.AddRange(list.Lobbies);
+
+                        list = new LobbyListResponse([.. copy],
+                DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval);
+                    }
                 }
             }
 
