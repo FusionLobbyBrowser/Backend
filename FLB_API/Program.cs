@@ -309,7 +309,7 @@ namespace FLB_API
                         if (EOSClient != null && EOSClient.Handler?.IsInitialized == true)
                         {
                             EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            friendsOnly.AddRange((await EOSClient.FetchLobbies("EOS", true)).ToList() ?? []);
+                            //friendsOnly.AddRange((await EOSClient.FetchLobbies("EOS", true)).ToList() ?? []);
                         }
                         else
                         {
