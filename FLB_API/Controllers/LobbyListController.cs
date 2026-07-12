@@ -70,9 +70,6 @@ namespace FLB_API.Controllers
 
             LobbyInfo[] copy = (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone();
 
-            var list = new LobbyListResponse(copy,
-                DateTimeOffset.FromUnixTimeSeconds(Program.FriendsOnlyLobbies.Date).DateTime, Program.FriendsOnlyLobbies.Interval);
-
             FriendsCache? friends;
             try
             {
@@ -86,7 +83,10 @@ namespace FLB_API.Controllers
             if (friends?.Friends == null)
                 return Program.CreateResult("Steam API returned no friends for such ID!", 400);
 
-            list.Lobbies = [.. list.Lobbies.Where(l => friends.Friends.Any(x=>x.SteamId==l.LobbyID))];
+            copy = [.. copy.Where(l => friends.Friends.Any(x=>x.SteamId==l.LobbyID))];
+
+            var list = new LobbyListResponse(copy,
+    DateTimeOffset.FromUnixTimeSeconds(Program.FriendsOnlyLobbies.Date).DateTime, Program.FriendsOnlyLobbies.Interval);
 
 
             return Program.CreateResult(list.JSON, contentType: "application/json");
