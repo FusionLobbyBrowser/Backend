@@ -33,6 +33,8 @@ namespace FLB_API
 
         internal static LobbyListResponse? Lobbies { get; private set; }
 
+        internal static LobbyListResponse? FriendsOnlyLobbies { get; private set; }
+
         internal static DateTime Uptime { get; private set; }
 
         internal static Settings? Settings { get; private set; }
@@ -293,15 +295,26 @@ namespace FLB_API
                 {
                     try
                     {
+                        List<LobbyInfo> friendsOnly = [];
                         if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
+                        {
                             SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            friendsOnly = (await FusionClient.FetchLobbies("Steam", true)).ToList() ?? [];
+                        }
                         else
+                        {
                             Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
+                        }
 
                         if (EOSClient != null && EOSClient.Handler?.IsInitialized == true)
+                        {
                             EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            friendsOnly.AddRange((await EOSClient.FetchLobbies("EOS", true)).ToList() ?? []);
+                        }
                         else
+                        {
                             Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        }
 
                         Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
@@ -320,24 +333,27 @@ namespace FLB_API
             }
         }
 
-        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name)
+        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name, bool friendsOnly = false)
         {
             if (client == null)
                 return [];
 
-            Logger?.Information($"Fetching {name} lobbies...");
+            Logger?.Information($"Fetching {name} lobbies... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
             LobbyInfo[] lobbies;
             try
             {
-                lobbies = await client.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+                if (!friendsOnly)
+                    lobbies = await client.GetLobbies();
+                else
+                    lobbies = await client.GetLobbies(publicLobbies: false, friendsOnlyLobbies: true);
             }
             catch (Exception e)
             {
-                Logger?.Error(e, $"Failed to fetch lobbies from {name}");
+                Logger?.Error(e, $"Failed to fetch lobbies from {name} {(friendsOnly ? "(Friends Only)" : "(Public)")}");
                 return [];
             }
 
-            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})...");
+            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
 
             return lobbies;
         }

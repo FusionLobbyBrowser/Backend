@@ -8,9 +8,7 @@
 
         public DateTime LastFetch { get; }
 
-        public Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false);
-
-        public bool IsFriend(string id);
+        public Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false);
 
         /// <summary>
         /// Initialize the handler that connects to the Steam API.

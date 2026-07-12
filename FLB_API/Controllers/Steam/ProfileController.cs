@@ -2,8 +2,6 @@
 
 using Microsoft.AspNetCore.Mvc;
 
-using Newtonsoft.Json;
-
 using Steam.Models.SteamCommunity;
 
 using SteamWebAPI2.Interfaces;

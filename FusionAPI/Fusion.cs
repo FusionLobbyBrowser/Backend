@@ -16,25 +16,23 @@ namespace FusionAPI
             await Handler.Init(logger, metadata);
         }
 
-        public async Task<LobbyInfo[]> GetLobbies(bool includeFull = true, bool includePrivate = false, bool includeSelf = false)
+        public async Task<LobbyInfo[]> GetLobbies(bool includeFull = true, bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             if (!Handler.IsInitialized)
                 return [];
 
-            // Fetch lobbies
-            var lobbies = await Handler.GetLobbies(includePrivate);
+            var lobbies = await Handler.GetLobbies(publicLobbies, friendsOnlyLobbies);
 
             List<LobbyInfo> netLobbies = [];
 
             foreach (var lobby in lobbies)
             {
-                // Make sure this is not us
-                if (lobby.IsOwnerMe && !includeSelf)
+                if (lobby.IsOwnerMe)
                     continue;
 
                 var metadata = LobbyMetadataInfo.Read(lobby);
 
-                if (!ValidateLobby(metadata, includePrivate, includeFull))
+                if (!ValidateLobby(metadata, publicLobbies, friendsOnlyLobbies, includeFull))
                     continue;
 
                 long uptime;
@@ -60,7 +58,7 @@ namespace FusionAPI
             return [.. netLobbies];
         }
 
-        private bool ValidateLobby(LobbyMetadataInfo? metadata, bool includePrivate, bool includeFull)
+        private static bool ValidateLobby(LobbyMetadataInfo? metadata, bool publicLobbies = true, bool friendsOnlyLobbies = false, bool includeFull = true)
         {
             if (metadata == null)
                 return false;
@@ -68,45 +66,22 @@ namespace FusionAPI
             if (!metadata.HasLobbyOpen)
                 return false;
 
-            if (!includePrivate && IsPrivate(metadata.LobbyInfo))
+            if (metadata.LobbyInfo == null)
                 return false;
 
-            if (metadata.LobbyInfo == null)
+            if (metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.PRIVATE || metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.LOCKED)
+                return false;
+
+            if(!publicLobbies && metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.PUBLIC)
+                return false;
+
+            if(!friendsOnlyLobbies && metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.FRIENDS_ONLY)
                 return false;
 
             if (!includeFull && metadata.LobbyInfo.PlayerCount == metadata.LobbyInfo.MaxPlayers)
                 return false;
 
             return true;
-        }
-
-        public LobbyInfo[] FilterLobbies(LobbyInfo[] lobbies, bool includeFull = true, bool includePrivate = false)
-        {
-            return [.. lobbies.Where(lobby =>
-            {
-                if (!includePrivate && IsPrivate(lobby))
-                    return false;
-                if (!includeFull && lobby.PlayerCount == lobby.MaxPlayers)
-                    return false;
-                return true;
-            })];
-        }
-
-        public bool IsPrivate(LobbyInfo? lobby)
-        {
-            if (lobby == null)
-                return true;
-
-            if (lobby.Privacy == Data.Enums.ServerPrivacy.PRIVATE)
-                return true;
-
-            if (lobby.Privacy == Data.Enums.ServerPrivacy.LOCKED)
-                return true;
-
-            if (lobby.Privacy == Data.Enums.ServerPrivacy.FRIENDS_ONLY && !Handler.IsFriend(lobby.LobbyID))
-                return true;
-
-            return false;
         }
 
         internal static bool IsTypeNumber(Type type)

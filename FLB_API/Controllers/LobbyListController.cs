@@ -1,3 +1,6 @@
+using FLB_API.Controllers.Steam;
+using FusionAPI.Data.Containers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 
@@ -7,8 +10,9 @@ namespace FLB_API.Controllers
     [Route("[controller]")]
     public class LobbyListController : ControllerBase
     {
-        [HttpGet(Name = "GetLobbies")]
-        public IActionResult Get([FromQuery(Name = "platform")] string platform = "")
+        [HttpGet(Name = "GetPublicLobbies")]
+        [Route("[controller]")]
+        public IActionResult GetPublicLobbies([FromQuery(Name = "platform")] string platform = "")
         {
             Platform platformType;
             if (platform.Equals("Steam", StringComparison.OrdinalIgnoreCase))
@@ -50,6 +54,42 @@ namespace FLB_API.Controllers
 
             if (string.IsNullOrWhiteSpace(list?.JSON))
                 return Program.CreateResult("Did not fetch lobbies yet", 500);
+
+            return Program.CreateResult(list.JSON, contentType: "application/json");
+        }
+
+        [HttpGet(Name = "GetFriendsOnlyLobbies")]
+        [Route("[controller]/friendsonly")]
+        [Authorize]
+        public async Task<IActionResult> GetFriendsOnly()
+        {
+            var self = User.GetSteamID();
+            if (self == -1)
+                return Program.CreateResult("Not authorized!", 401);
+
+            if (string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
+                return Program.CreateResult("Did not fetch lobbies yet", 500);
+
+            LobbyInfo[] copy = (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone();
+
+            var list = new LobbyListResponse(copy,
+                DateTimeOffset.FromUnixTimeSeconds(Program.FriendsOnlyLobbies.Date).DateTime, Program.FriendsOnlyLobbies.Interval);
+
+            FriendsCache? friends;
+            try
+            {
+                friends = await FriendsController.GetFriends((ulong)self);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                return Program.CreateResult("The user has the friends list private!", 401);
+            }
+
+            if (friends?.Friends == null)
+                return Program.CreateResult("Steam API returned no friends for such ID!", 400);
+
+            list.Lobbies = [.. list.Lobbies.Where(l => friends.Friends.Any(x=>x.SteamId==l.LobbyID))];
+
 
             return Program.CreateResult(list.JSON, contentType: "application/json");
         }

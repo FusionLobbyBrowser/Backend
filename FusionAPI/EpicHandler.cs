@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
-
+using FusionAPI.Data.Enums;
 using FusionAPI.EOS.Auth;
 using FusionAPI.EOS.Core;
 using FusionAPI.Epic;
@@ -31,14 +31,14 @@ namespace FusionAPI
 
         public string ID => "Epic";
 
-        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             var options = new CreateLobbySearchOptions
             {
                 MaxResults = 200
             };
 
-            LobbySearch searchHandle = null;
+            LobbySearch? searchHandle = null;
 
             if (!AuthManager.IsLoggedIn)
             {
@@ -63,11 +63,18 @@ namespace FusionAPI
                 },
                 ComparisonOp = ComparisonOp.Equal,
             };
-            searchHandle.SetParameter(ref identifierParam);
 
             if (searchHandle == null)
             {
                 Logger.Error("LobbySearch handle is null after creation");
+                return [];
+            }
+
+            searchHandle.SetParameter(ref identifierParam);
+
+            if(AuthManager?.LocalUserId == null)
+            {
+                Logger.Error("LocalUserId is null, cannot proceed with lobby search.");
                 return [];
             }
 
@@ -135,7 +142,7 @@ namespace FusionAPI
             return await tcs.Task;
         }
 
-        private EpicLobby? ProcessSingleLobby(LobbyDetails lobbyDetails)
+        private EpicLobby? ProcessSingleLobby(LobbyDetails lobbyDetails, bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             var ownerOptions = new LobbyDetailsGetLobbyOwnerOptions();
             var ownerId = lobbyDetails.GetLobbyOwner(ref ownerOptions);
@@ -154,6 +161,19 @@ namespace FusionAPI
             {
                 return null;
             }
+
+            if (!networkLobby.TryGetData(LobbyKeys.PrivacyKey, out var privacyStr) || !int.TryParse(privacyStr, out int privacyInt))
+                return null;
+
+            ServerPrivacy privacyLevel = (ServerPrivacy)privacyInt;
+
+            if (!publicLobbies && privacyLevel == ServerPrivacy.PUBLIC)
+                return null;
+            else if (!friendsOnlyLobbies && privacyLevel == ServerPrivacy.FRIENDS_ONLY)
+                return null;
+            else if (privacyLevel == ServerPrivacy.PRIVATE || privacyLevel == ServerPrivacy.LOCKED)
+                return null;
+
 
             var metadata = ReadMetadata(networkLobby);
 
@@ -227,9 +247,6 @@ namespace FusionAPI
 
         private IntPtr ResolverCallback(string name, Assembly assembly, DllImportSearchPath? path)
             => name.Contains("EOSSDK", StringComparison.OrdinalIgnoreCase) ? EOSHandle : IntPtr.Zero;
-
-        public bool IsFriend(string id)
-            => false;
     }
 
     internal class EpicLobby(LobbyDetails details, EOSHandler handler) : IMatchmakingLobby
