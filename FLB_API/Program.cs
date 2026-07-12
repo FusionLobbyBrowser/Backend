@@ -19,7 +19,7 @@ namespace FLB_API
 {
     public static class Program
     {
-        public static Fusion? FusionClient { get; private set; }
+        public static Fusion? SteamClient { get; private set; }
 
         public static Fusion? EOSClient { get; private set; }
 
@@ -109,18 +109,18 @@ namespace FLB_API
 
                 if (choice.StartsWith("SteamKit"))
                 {
-                    FusionClient = new Fusion(new SteamKitHandler());
+                    SteamClient = new Fusion(new SteamKitHandler());
                     metadata = await SetupSteamKit();
                 }
                 else
                 {
                     Logger?.Information("Connecting with Steamworks");
-                    FusionClient = new Fusion(new SteamworksHandler());
+                    SteamClient = new Fusion(new SteamworksHandler());
                 }
-                Handlers.Add(FusionClient.Handler);
+                Handlers.Add(SteamClient.Handler);
 
                 SteamLogger = new Logger(level, "Steam");
-                await FusionClient.Initialize(SteamLogger, metadata);
+                await SteamClient.Initialize(SteamLogger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
                 EOSClient = new Fusion(new EOSHandler());
                 var eosLogger = new Logger(level, "EOS");
@@ -200,9 +200,9 @@ namespace FLB_API
         {
             Dictionary<string, string> metadata = [];
             Logger?.Information("Connecting with SteamKit");
-            if (FusionClient == null)
+            if (SteamClient == null)
                 return [];
-            ((SteamKitHandler)FusionClient.Handler).Authenticator = new CustomUserAuth(
+            ((SteamKitHandler)SteamClient.Handler).Authenticator = new CustomUserAuth(
                 () =>
                 {
                     AuthCancel?.Cancel();
@@ -291,15 +291,15 @@ namespace FLB_API
             LoadSettings();
             while (!token.IsCancellationRequested)
             {
-                if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
+                if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
                 {
                     try
                     {
                         List<LobbyInfo> friendsOnly = [];
-                        if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
+                        if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
                         {
-                            SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            friendsOnly = (await FusionClient.FetchLobbies("Steam", true)).ToList() ?? [];
+                            SteamLobbies = new(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
                         }
                         else
                         {
@@ -316,6 +316,7 @@ namespace FLB_API
                             Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
                         }
 
+                        FriendsOnlyLobbies = new([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
                         LoadSettings();

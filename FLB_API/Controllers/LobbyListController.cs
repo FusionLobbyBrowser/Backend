@@ -25,13 +25,13 @@ namespace FLB_API.Controllers
 
             if (platformType != Platform.Steam)
             {
-                var handler = platformType == Platform.Steam ? Program.FusionClient : Program.EOSClient;
+                var handler = platformType == Platform.Steam ? Program.SteamClient : Program.EOSClient;
                 if (handler?.Handler.IsInitialized != true)
                     return Program.CreateResult($"Server is not connected to {Enum.GetName(platformType)}.", 500);
             }
             else
             {
-                if (Program.FusionClient?.Handler.IsInitialized != true)
+                if (Program.SteamClient?.Handler.IsInitialized != true)
                     return Program.CreateResult("Server is not connected to Steam.", 500);
                 else if (Program.EOSClient?.Handler.IsInitialized != true)
                     return Program.CreateResult("Server is not connected to Epic.", 500);

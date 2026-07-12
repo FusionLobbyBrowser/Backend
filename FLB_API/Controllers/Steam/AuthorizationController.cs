@@ -11,17 +11,17 @@ namespace FLB_API.Controllers.Steam
     [Route("steam")]
     public class AuthorizationController : ControllerBase
     {
-        [HttpGet("login"), HttpPost("login")]
+        [HttpGet("login", Name = "SteamLogin"), HttpPost("login", Name = "SteamLogin")]
         public async Task<IActionResult> SignIn([FromQuery(Name = "redirectURL")] string redirectURL = "")
             => Challenge(new AuthenticationProperties { RedirectUri = (string.IsNullOrWhiteSpace(redirectURL) ? "https://fusion.hahoos.dev/" : redirectURL), IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddYears(1) }, "Steam");
 
-        [HttpGet("logout"), HttpPost("logout")]
+        [HttpGet("logout", Name = "SteamLogout"), HttpPost("logout", Name = "SteamLogout")]
         public IActionResult SignOutCurrentUser([FromQuery(Name = "redirectURL")] string redirectURL = "")
             => SignOut(new AuthenticationProperties { RedirectUri = (string.IsNullOrWhiteSpace(redirectURL) ? "https://fusion.hahoos.dev/" : redirectURL) },
                 CookieAuthenticationDefaults.AuthenticationScheme);
 
         [Authorize]
-        [HttpGet("me")]
+        [HttpGet("me", Name = "GetSteamMe")]
         public async Task<IActionResult> GetMe()
         {
             var profile = await User.GetSteamProfile();
