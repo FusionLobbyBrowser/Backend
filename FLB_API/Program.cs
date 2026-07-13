@@ -168,7 +168,6 @@ namespace FLB_API
             var app = builder.Build();
 
             app.UseHttpsRedirection();
-            app.UseRouting();
             app.UseCors((builder) =>
                 builder
                     .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com", "https://www.hoodrp.com")
