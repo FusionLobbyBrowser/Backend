@@ -106,10 +106,27 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             => $"Data from <t:{res.Date}:R>. If this shows that more than **{res.Interval} seconds ago**, make sure to **refresh** for up-to-date information!";
 
         [SubSlashCommand("info", "Get more details about a lobby!")]
-        public static async Task<InteractionMessageProperties> Info(
+        public class LobbiesInfoModule : ApplicationCommandModule<ApplicationCommandContext>
+        {
+
+            [SubSlashCommand("steam", "Get more details about a lobby! (Autocomplete with Steam lobbies)")]
+            public static async Task<InteractionMessageProperties> SteamInfo(
+            [SlashCommandParameter(Name = "id", Description = "Input an ID of a lobby or select from the available choices (only 25 lobbies with most players)",
+            AutocompleteProviderType = typeof(SteamInfoAutoComplete))] string id)
+            => await Internal_Info(id, 1);
+
+            [SubSlashCommand("epicgames", "Get more details about a lobby! (Autocomplete with Epic Games lobbies)")]
+            public static async Task<InteractionMessageProperties> EpicInfo(
+            [SlashCommandParameter(Name = "id", Description = "Input an ID of a lobby or select from the available choices (only 25 lobbies with most players)",
+            AutocompleteProviderType = typeof(EpicInfoAutoComplete))] string id)
+            => await Internal_Info(id, 1);
+
+            [SubSlashCommand("all", "Get more details about a lobby! (Autocomplete with all lobbies)")]
+            public static async Task<InteractionMessageProperties> Info(
             [SlashCommandParameter(Name = "id", Description = "Input an ID of a lobby or select from the available choices (only 25 lobbies with most players)",
             AutocompleteProviderType = typeof(InfoAutoComplete))] string id)
             => await Internal_Info(id, 1);
+        }
 
         internal static async Task<InteractionMessageProperties> Internal_Info(string id, int page = 1)
         {
@@ -305,6 +322,8 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
     public class InfoAutoComplete : IAutocompleteProvider<AutocompleteInteractionContext>
     {
+        public virtual Platform Platform { get; private set; } = Platform.All;
+
         public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(ApplicationCommandInteractionDataOption option, AutocompleteInteractionContext context)
         {
             var input = option.Value;
@@ -314,6 +333,9 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
                 return new([]);
 
             var lobbies = new List<LobbyInfo>(Program.Lobbies?.Lobbies!)?.OrderByDescending(x => x.PlayerCount).ToList() ?? [];
+            if (Platform != Platform.All)
+                lobbies = [.. lobbies.Where(x => x.LobbyPlatform == Enum.GetName(Platform))];
+
             if (!string.IsNullOrWhiteSpace(input))
                 lobbies = [.. lobbies.Where(x => Fuzz.PartialRatio(input, x.GetLobbyName()) >= 35)];
             foreach (var item in lobbies.Take(25))
@@ -352,6 +374,16 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
             return string.Format("{0}...", input[..((iNextSpace > 0) ? iNextSpace : length)].Trim());
         }
+    }
+
+    public class SteamInfoAutoComplete : InfoAutoComplete
+    {
+        public override Platform Platform => Platform.Steam;
+    }
+
+    public class EpicInfoAutoComplete : InfoAutoComplete
+    {
+        public override Platform Platform => Platform.Epic;
     }
 
     [method: JsonConstructor]

@@ -32,7 +32,7 @@ namespace FLB_API.Discord
             Client = new GatewayClient(new BotToken(Program.Settings.DiscordBotToken), new()
             {
                 Intents = default,
-                Logger = new SerilogLogger(Logger)
+                Logger = new SerilogLogger(Logger) { Level = LogLevel.Trace },
             });
             ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext> applicationCommandService = new();
             applicationCommandService.AddModule<LobbiesCommandModule>();
