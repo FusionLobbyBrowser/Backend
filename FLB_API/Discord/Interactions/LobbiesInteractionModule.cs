@@ -1,4 +1,5 @@
-﻿using NetCord;
+﻿using FLB_API.Discord.Commands;
+using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 

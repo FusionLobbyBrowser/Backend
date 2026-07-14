@@ -15,7 +15,7 @@ using NetCord.Services.ApplicationCommands;
 
 using Platform = FLB_API.Controllers.LobbyListController.Platform;
 
-namespace FLB_API.Discord
+namespace FLB_API.Discord.Commands
 {
     [SlashCommand("lobbies", "Lobbies command")]
     public partial class LobbiesCommandModule : ApplicationCommandModule<ApplicationCommandContext>
@@ -93,7 +93,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             row.AddComponents(new ButtonProperties($"button_refresh:{(int)platform}:{page}", "Refresh", ButtonStyle.Secondary));
             row.AddComponents(new ButtonProperties($"button_next:{(int)platform}:{page}:{pages}", "Next Page", EmojiProperties.Custom((ulong)CustomEmoji.CaretRight), ButtonStyle.Primary));
             var row2 = new ActionRowProperties();
-            row2.AddComponents(new ButtonProperties("button_removeMsg", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
+            row2.AddComponents(new ButtonProperties("button_removeMsg", "Delete Message", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
             container.AddComponents(row);
             container.AddComponents(row2);
 
@@ -164,7 +164,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             var row2 = new ActionRowProperties();
             row2.AddComponents(new LinkButtonProperties($"https://fusion.hahoos.dev/?lobby={l.LobbyID}", "View on Website", EmojiProperties.Custom(1522004581687623740)));
             row2.AddComponents(new ButtonProperties($"button_refreshInfo:{l.LobbyID}:{page}", "Refresh", ButtonStyle.Secondary));
-            row2.AddComponents(new ButtonProperties("button_removeMsg", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
+            row2.AddComponents(new ButtonProperties("button_removeMsg","Delete Message", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
 
             container.AddComponents(row);
             container.AddComponents(row2);
@@ -187,7 +187,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             else
                 avatar = "[NSFW]";
             var thumbnail = GetThumbnailURL(p.AvatarModID,
-                    p.AvatarModID == -1 && ThumbnailController.Vanilla.ContainsKey(p.AvatarTitle) ? p.AvatarTitle : string.Empty);
+                    p.AvatarModID == -1 && ThumbnailController.Vanilla.ContainsKey(p.AvatarTitle ?? "N/A") ? p.AvatarTitle : string.Empty);
 
             bool result = Uri.TryCreate(thumbnail, UriKind.Absolute, out Uri? uriResult)
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);

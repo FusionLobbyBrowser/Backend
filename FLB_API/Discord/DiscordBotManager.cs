@@ -1,4 +1,6 @@
-﻿using FusionAPI.Data.Containers;
+﻿using FLB_API.Discord.Commands;
+using FLB_API.Discord.Interactions;
+using FusionAPI.Data.Containers;
 
 using NetCord;
 using NetCord.Gateway;
@@ -14,9 +16,9 @@ namespace FLB_API.Discord
 {
     public static class DiscordBotManager
     {
-        public static GatewayClient Client { get; private set; }
+        public static GatewayClient? Client { get; private set; }
 
-        public static Logger Logger { get; private set; }
+        public static Logger? Logger { get; private set; }
 
         public static async Task Setup()
         {
@@ -34,10 +36,11 @@ namespace FLB_API.Discord
             });
             ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext> applicationCommandService = new();
             applicationCommandService.AddModule<LobbiesCommandModule>();
+            applicationCommandService.AddModule<OtherCommandModule>();
 
             ComponentInteractionService<ButtonInteractionContext> interactionService = new();
-            interactionService.AddModule<LobbiesCheckModule>();
-            interactionService.AddModule<LobbiesInfoModule>();
+            interactionService.AddModule<LobbiesInteractionModule>();
+            interactionService.AddModule<UniversalInteractionModule>();
 
             Client.InteractionCreate += async interaction =>
             {
@@ -73,7 +76,12 @@ namespace FLB_API.Discord
         }
 
         public static async Task Status()
-            => await Client.UpdatePresenceAsync(new PresenceProperties(UserStatusType.Online) { Activities = [new($"over {Program.Lobbies?.Lobbies?.Length ?? 0} lobbies!", UserActivityType.Watching)] });
+        { 
+            if(Client != null)
+                await Client.UpdatePresenceAsync(
+                    new PresenceProperties(UserStatusType.Online) {
+                        Activities = [new($"over {Program.Lobbies?.Lobbies?.Length ?? 0} lobbies!", UserActivityType.Watching)] }); 
+        }
 
         public static string GetLobbyName(this LobbyInfo lobby)
             => string.IsNullOrWhiteSpace(lobby.LobbyName) ? $"{LobbiesCommandModule.RemoveUnityRichText(lobby.LobbyHostName)}'s Lobby" : LobbiesCommandModule.RemoveUnityRichText(lobby.LobbyName);
