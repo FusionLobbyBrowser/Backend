@@ -25,7 +25,7 @@ namespace FLB_API.Discord.Interactions
                 return DiscordBotManager.Error(NO_MORE_PAGES);
             page++;
             await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(_platform, page).Components);
-            return new InteractionMessageProperties().WithContent("Advanced to page " + page).WithFlags(MessageFlags.Ephemeral);
+            return new InteractionMessageProperties().WithContent(string.Format(ADVANCE_MSG, page)).WithFlags(MessageFlags.Ephemeral);
         }
 
         [ComponentInteraction("button_previous")]
