@@ -8,6 +8,7 @@ using FusionAPI;
 using FusionAPI.Data.Containers;
 using FusionAPI.Interfaces;
 
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 
@@ -20,7 +21,7 @@ namespace FLB_API
 {
     public static class Program
     {
-        public static Fusion? FusionClient { get; private set; }
+        public static Fusion? SteamClient { get; private set; }
 
         public static Fusion? EOSClient { get; private set; }
 
@@ -33,6 +34,8 @@ namespace FLB_API
         internal static LobbyListResponse? EOSLobbies { get; private set; }
 
         internal static LobbyListResponse? Lobbies { get; private set; }
+
+        internal static LobbyListResponse? FriendsOnlyLobbies { get; private set; }
 
         internal static DateTime Uptime { get; private set; }
 
@@ -108,18 +111,18 @@ namespace FLB_API
 
                 if (choice.StartsWith("SteamKit"))
                 {
-                    FusionClient = new Fusion(new SteamKitHandler());
+                    SteamClient = new Fusion(new SteamKitHandler());
                     metadata = await SetupSteamKit();
                 }
                 else
                 {
                     Logger?.Information("Connecting with Steamworks");
-                    FusionClient = new Fusion(new SteamworksHandler());
+                    SteamClient = new Fusion(new SteamworksHandler());
                 }
-                Handlers.Add(FusionClient.Handler);
+                Handlers.Add(SteamClient.Handler);
 
                 SteamLogger = new Logger(level, "Steam");
-                await FusionClient.Initialize(SteamLogger, metadata);
+                await SteamClient.Initialize(SteamLogger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
                 EOSClient = new Fusion(new EOSHandler());
                 var eosLogger = new Logger(level, "EOS");
@@ -139,24 +142,47 @@ namespace FLB_API
             builder.Logging.ClearProviders();
             builder.Logging.AddSerilog(Logger);
 
+            builder.Services
+                .AddAuthentication(options => options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(options =>
+                {
+                    options.Cookie.HttpOnly = true;
+                    options.Cookie.SameSite = SameSiteMode.None;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+                    options.SlidingExpiration = true;
+                    options.Cookie.Name = "SteamAuth";
+                    options.LoginPath = "/steam/login";
+                    options.LogoutPath = "/steam/logout";
+
+                    options.Events.OnRedirectToLogin = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    };
+                })
+                .AddSteam(options => options.ApplicationKey = Settings?.SteamWebAPI_Token);
+
             builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
 
             var app = builder.Build();
 
+            app.UseHttpsRedirection();
             app.UseCors((builder) =>
                 builder
-                    .AllowAnyOrigin()
+                    .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com", "https://www.hoodrp.com")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
+                    .AllowCredentials()
             );
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
                 app.MapOpenApi();
 
-            app.UseHttpsRedirection();
+            app.UseAuthentication();
+            app.UseAuthorization();
 
             app.MapControllers();
 
@@ -178,9 +204,9 @@ namespace FLB_API
         {
             Dictionary<string, string> metadata = [];
             Logger?.Information("Connecting with SteamKit");
-            if (FusionClient == null)
+            if (SteamClient == null)
                 return [];
-            ((SteamKitHandler)FusionClient.Handler).Authenticator = new CustomUserAuth(
+            ((SteamKitHandler)SteamClient.Handler).Authenticator = new CustomUserAuth(
                 () =>
                 {
                     AuthCancel?.Cancel();
@@ -269,20 +295,32 @@ namespace FLB_API
             LoadSettings();
             while (!token.IsCancellationRequested)
             {
-                if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
+                if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
                 {
                     try
                     {
-                        if (FusionClient != null && FusionClient.Handler?.IsInitialized == true)
-                            SteamLobbies = new(await FusionClient.FetchLobbies("Steam") ?? [], FusionClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                        List<LobbyInfo> friendsOnly = [];
+                        if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
+                        {
+                            SteamLobbies = new(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
+                        }
                         else
+                        {
                             Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
+                        }
 
                         if (EOSClient != null && EOSClient.Handler?.IsInitialized == true)
+                        {
                             EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            //friendsOnly.AddRange((await EOSClient.FetchLobbies("EOS", true)).ToList() ?? []);
+                        }
                         else
+                        {
                             Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        }
 
+                        FriendsOnlyLobbies = new([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
                         if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
@@ -312,24 +350,27 @@ namespace FLB_API
             }
         }
 
-        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name)
+        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name, bool friendsOnly = false)
         {
             if (client == null)
                 return [];
 
-            Logger?.Information($"Fetching {name} lobbies...");
+            Logger?.Information($"Fetching {name} lobbies... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
             LobbyInfo[] lobbies;
             try
             {
-                lobbies = await client.GetLobbies(includeFull: true, includePrivate: false, includeSelf: true);
+                if (!friendsOnly)
+                    lobbies = await client.GetLobbies();
+                else
+                    lobbies = await client.GetLobbies(publicLobbies: false, friendsOnlyLobbies: true);
             }
             catch (Exception e)
             {
-                Logger?.Error(e, $"Failed to fetch lobbies from {name}");
+                Logger?.Error(e, $"Failed to fetch lobbies from {name} {(friendsOnly ? "(Friends Only)" : "(Public)")}");
                 return [];
             }
 
-            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})...");
+            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
 
             return lobbies;
         }
@@ -341,7 +382,7 @@ namespace FLB_API
 
             if (IMAPEmpty())
             {
-                Logger?.Warning("Empty IMAP Configuration, falling back to manual input...");
+                SteamLogger?.Warning("Empty IMAP Configuration, falling back to manual input...");
                 AuthCancel = new CancellationTokenSource();
                 return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
             }
@@ -349,8 +390,8 @@ namespace FLB_API
             {
                 try
                 {
-                    Logger?.Information("Using IMAP to fetch Steam Auth Code...");
-                    await Task.Delay((int)3.5f * 1000); // Wait for email to arrive, to avoid excessive requests
+                    SteamLogger?.Info("Using IMAP to fetch Steam Auth Code...");
+                    await Task.Delay((int)3.5f * 1000);
                     ImapManager ??= new IMAPManager(
                         Settings!.IMAP!.Host!,
                         Settings.IMAP.Port,
@@ -361,17 +402,17 @@ namespace FLB_API
                     var code = await ImapManager.GetCodeAsync();
                     if (string.IsNullOrWhiteSpace(code))
                     {
-                        Logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
+                        SteamLogger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
                         AuthCancel = new CancellationTokenSource();
                         return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                     }
-                    Logger?.Information("Successfully retrieved Steam Auth Code from email");
+                    SteamLogger?.Info("Successfully retrieved Steam Auth Code from email");
                     return code;
                 }
                 catch (Exception ex)
                 {
-                    Logger?.Error(ex, "Failed to retrieve the code from email");
-                    Logger?.Information("Falling back to manual input...");
+                    SteamLogger?.Error("Failed to retrieve the code from email", ex);
+                    SteamLogger?.Info("Falling back to manual input...");
                     AuthCancel = new CancellationTokenSource();
                     return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                 }

@@ -178,7 +178,7 @@ namespace FusionAPI
             Logger?.Info("Logged off from Steam.");
         }
 
-        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             List<Filter> filters = [
                     new DistanceFilter(ELobbyDistanceFilter.Worldwide),
@@ -187,12 +187,10 @@ namespace FusionAPI
                     new StringFilter(LobbyKeys.IdentifierKey, ELobbyComparison.Equal, bool.TrueString),
                     new StringFilter(LobbyKeys.GameKey, ELobbyComparison.Equal, "BONELAB"),
                 ];
-            if (!includePrivate)
-            {
-                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.PRIVATE));
-                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.LOCKED));
-                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.NotEqual, (int)ServerPrivacy.FRIENDS_ONLY));
-            }
+            if(publicLobbies)
+                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.Equal, (int)ServerPrivacy.PUBLIC));
+            if(friendsOnlyLobbies)
+                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.Equal, (int)ServerPrivacy.FRIENDS_ONLY));
 
             if (Matchmaking == null)
                 return [];
@@ -205,7 +203,8 @@ namespace FusionAPI
             if (lobbies != null && lobbies.Result == EResult.OK)
             {
                 _lastFetch = DateTime.Now;
-                return [.. ProcessLobbies(lobbies.Lobbies)];
+                IMatchmakingLobby[] processed = [.. ProcessLobbies(lobbies.Lobbies)];
+                return processed;
             }
             return [];
         }
