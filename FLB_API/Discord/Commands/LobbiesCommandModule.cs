@@ -88,11 +88,11 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             container.AddComponents(new TextDisplayProperties(LastRefresh(list)));
             var row = new ActionRowProperties();
             row.AddComponents(new ButtonProperties($"button_previous:{(int)platform}:{page}", "Previous Page", EmojiProperties.Custom((ulong)CustomEmoji.CaretLeft), ButtonStyle.Primary));
-            row.AddComponents(new LinkButtonProperties("https://fusion.hahoos.dev/", "Website", EmojiProperties.Custom((ulong)CustomEmoji.Link)));
             row.AddComponents(new ButtonProperties($"button_currentPage:{(int)platform}", $"Page {page}/{pages}", ButtonStyle.Secondary));
-            row.AddComponents(new ButtonProperties($"button_refresh:{(int)platform}:{page}", "Refresh", ButtonStyle.Secondary));
             row.AddComponents(new ButtonProperties($"button_next:{(int)platform}:{page}:{pages}", "Next Page", EmojiProperties.Custom((ulong)CustomEmoji.CaretRight), ButtonStyle.Primary));
             var row2 = new ActionRowProperties();
+            row2.AddComponents(new LinkButtonProperties("https://fusion.hahoos.dev/", "Website", EmojiProperties.Custom((ulong)CustomEmoji.Link)));
+            row2.AddComponents(new ButtonProperties($"button_refresh:{(int)platform}:{page}", "Refresh", ButtonStyle.Secondary));
             row2.AddComponents(new ButtonProperties("button_removeMsg", "Delete Message", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
             container.AddComponents(row);
             container.AddComponents(row2);
