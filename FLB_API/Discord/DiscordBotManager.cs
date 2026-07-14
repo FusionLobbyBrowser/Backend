@@ -32,7 +32,7 @@ namespace FLB_API.Discord
             Client = new GatewayClient(new BotToken(Program.Settings.DiscordBotToken), new()
             {
                 Intents = default,
-                Logger = new SerilogLogger()
+                Logger = new SerilogLogger(Logger)
             });
             ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext> applicationCommandService = new();
             applicationCommandService.AddModule<LobbiesCommandModule>();
@@ -89,7 +89,7 @@ namespace FLB_API.Discord
         public static InteractionMessageProperties Error(string message, string title = "Error!", bool showReportMsg = false)
         {
             if (showReportMsg)
-                message += "\n\nIf the issue persists, contact me by DMing me on discord (@hahoos) or report the issue on [github](https://github.com/FusionLobbyBrowser/Backend)!";
+                message += "\n\nIf the issue persists, contact me by DMing me on discord (@hahoos) or report the issue on [Github](https://github.com/FusionLobbyBrowser/Backend)!";
             return new InteractionMessageProperties().AddEmbeds(new EmbedProperties()
             {
                 Title = title,
@@ -101,8 +101,10 @@ namespace FLB_API.Discord
         }
     }
 
-    public class SerilogLogger : IGatewayLogger, IRestLogger, IVoiceLogger
+    public class SerilogLogger(Logger? logger = null) : IGatewayLogger, IRestLogger, IVoiceLogger
     {
+        public Logger Logger = logger ?? new Logger("DISCORD");
+
         public LogLevel Level { get; set; } = LogLevel.Trace;
 
         public bool IsEnabled(NetCord.Logging.LogLevel logLevel)
@@ -110,21 +112,20 @@ namespace FLB_API.Discord
 
         public void Log<TState>(NetCord.Logging.LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            const string prefix = "[DISCORD]";
             if (logLevel == LogLevel.Information)
-                Program.Logger?.Information($"{prefix} " + formatter.Invoke(state, exception));
+                Logger?.Info(formatter.Invoke(state, exception));
             else if (logLevel == LogLevel.Warning)
-                Program.Logger?.Warning($"{prefix} " + formatter.Invoke(state, exception));
+                Logger?.Warning(formatter.Invoke(state, exception));
             else if (logLevel == LogLevel.Error)
-                Program.Logger?.Error($"{prefix} " + formatter.Invoke(state, exception));
+                Logger?.Error(formatter.Invoke(state, exception));
             else if (logLevel == LogLevel.Debug)
-                Program.Logger?.Debug($"{prefix} " + formatter.Invoke(state, exception));
+                Logger?.Debug(formatter.Invoke(state, exception));
             else if (logLevel == LogLevel.Trace)
-                Program.Logger?.Debug($"{prefix} [TRACE] {formatter.Invoke(state, exception)}");
+                Logger?.Trace(formatter.Invoke(state, exception));
             else if (logLevel == LogLevel.Critical)
-                Program.Logger?.Error($"{prefix} [CRITICAL] {formatter.Invoke(state, exception)}");
+                Logger?.Error($"[CRITICAL] {formatter.Invoke(state, exception)}");
             else if (logLevel == LogLevel.None)
-                Program.Logger?.Information($"{prefix} [NONE] {formatter.Invoke(state, exception)}");
+                Logger?.Info($"[NONE] {formatter.Invoke(state, exception)}");
         }
     }
 }

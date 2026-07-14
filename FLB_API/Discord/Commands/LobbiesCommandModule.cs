@@ -226,13 +226,13 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             lobbies = null;
             if (platform != Platform.All)
             {
-                var handler = platform == Platform.Steam ? Program.FusionClient : Program.EOSClient;
+                var handler = platform == Platform.Steam ? Program.SteamClient : Program.EOSClient;
                 if (handler?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error($"Server is not connected to {Enum.GetName(platform)}.");
             }
             else
             {
-                if (Program.FusionClient?.Handler.IsInitialized != true)
+                if (Program.SteamClient?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error("Server is not connected to Steam.");
                 else if (Program.EOSClient?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error("Server is not connected to Epic.");
