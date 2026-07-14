@@ -18,9 +18,9 @@ namespace FusionAPI
 
         public string ID => "Steam";
 
-        public async Task<IMatchmakingLobby[]> GetLobbies(bool includePrivate = false)
+        public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
-            var lobbies = ConvertLobbies(await GetSteamLobbies(includePrivate));
+            var lobbies = ConvertLobbies(await GetSteamLobbies(publicLobbies, friendsOnlyLobbies));
             _lastFetch = DateTime.Now;
             return [.. lobbies];
         }
@@ -35,7 +35,7 @@ namespace FusionAPI
             return list;
         }
 
-        internal static async Task<Lobby[]> GetSteamLobbies(bool includePrivate = false)
+        internal static async Task<Lobby[]> GetSteamLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             var list = SteamMatchmaking.LobbyList;
             list.FilterDistanceWorldwide();
@@ -45,12 +45,10 @@ namespace FusionAPI
             list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
             list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
-            if (!includePrivate)
-            {
-                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PRIVATE);
-                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.LOCKED);
-                list.WithNotEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
-            }
+            if(publicLobbies)
+                list.WithEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PUBLIC);
+            if(friendsOnlyLobbies)
+                list.WithEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
 
             return await list.RequestAsync();
         }
