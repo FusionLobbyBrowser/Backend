@@ -366,7 +366,7 @@ namespace FLB_API
 
             if (IMAPEmpty())
             {
-                Logger?.Warning("Empty IMAP Configuration, falling back to manual input...");
+                SteamLogger?.Warning("Empty IMAP Configuration, falling back to manual input...");
                 AuthCancel = new CancellationTokenSource();
                 return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
             }
@@ -374,8 +374,8 @@ namespace FLB_API
             {
                 try
                 {
-                    Logger?.Information("Using IMAP to fetch Steam Auth Code...");
-                    await Task.Delay((int)3.5f * 1000); // Wait for email to arrive, to avoid excessive requests
+                    SteamLogger?.Info("Using IMAP to fetch Steam Auth Code...");
+                    await Task.Delay((int)3.5f * 1000);
                     ImapManager ??= new IMAPManager(
                         Settings!.IMAP!.Host!,
                         Settings.IMAP.Port,
@@ -386,17 +386,17 @@ namespace FLB_API
                     var code = await ImapManager.GetCodeAsync();
                     if (string.IsNullOrWhiteSpace(code))
                     {
-                        Logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
+                        SteamLogger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
                         AuthCancel = new CancellationTokenSource();
                         return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                     }
-                    Logger?.Information("Successfully retrieved Steam Auth Code from email");
+                    SteamLogger?.Info("Successfully retrieved Steam Auth Code from email");
                     return code;
                 }
                 catch (Exception ex)
                 {
-                    Logger?.Error(ex, "Failed to retrieve the code from email");
-                    Logger?.Information("Falling back to manual input...");
+                    SteamLogger?.Error("Failed to retrieve the code from email", ex);
+                    SteamLogger?.Info("Falling back to manual input...");
                     AuthCancel = new CancellationTokenSource();
                     return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                 }
