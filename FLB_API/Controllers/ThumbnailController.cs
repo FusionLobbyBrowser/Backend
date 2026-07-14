@@ -106,147 +106,18 @@ namespace FLB_API.Controllers
                     return Program.CreateResult("Thumbnail not found. (Vanilla thumbnail missing)", 404);
                 }
 
-                thumbnail = new(-1, System.IO.File.OpenRead(file), null);
+                thumbnail = new(-1, await System.IO.File.ReadAllBytesAsync(file), null);
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues(["ModIO-Maturity", "Server-Uptime"]);
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
             Response.Headers.Append("ModIO-Maturity", thumbnail.IsNSFW ? "nsfw" : "safe");
 
-            thumbnail.Image.Position = 0;
-            return new FLB_API.Controllers.FileStreamResult(thumbnail.Image, "image/png")
+            var stream = new MemoryStream(thumbnail.Image, false)
             {
-                FileDownloadName = $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png",
+                Position = 0,
             };
-        }
-    }
-
-    public class FileStreamResult : FileResult
-    {
-        private Stream _fileStream;
-
-        public FileStreamResult(Stream fileStream, string contentType)
-            : this(fileStream, MediaTypeHeaderValue.Parse(contentType))
-        {
-        }
-
-        public FileStreamResult(Stream fileStream, MediaTypeHeaderValue contentType)
-            : base(contentType.ToString())
-        {
-            ArgumentNullException.ThrowIfNull(fileStream);
-
-            FileStream = fileStream;
-        }
-
-        public Stream FileStream
-        {
-            get => _fileStream;
-
-            [MemberNotNull(nameof(_fileStream))]
-            set
-            {
-                ArgumentNullException.ThrowIfNull(value);
-
-                _fileStream = value;
-            }
-        }
-
-        public override Task ExecuteResultAsync(ActionContext context)
-        {
-            ArgumentNullException.ThrowIfNull(context);
-
-            var executor = context.HttpContext.RequestServices.GetRequiredService<IActionResultExecutor<FileStreamResult>>();
-            return executor.ExecuteAsync(context, this);
-        }
-    }
-
-    public partial class FileStreamResultExecutor(ILoggerFactory loggerFactory) : FileResultExecutorBase(CreateLogger<FileStreamResultExecutor>(loggerFactory)), IActionResultExecutor<FileStreamResult>
-    {
-        public virtual async Task ExecuteAsync(ActionContext context, FileStreamResult result)
-        {
-            ArgumentNullException.ThrowIfNull(context);
-            ArgumentNullException.ThrowIfNull(result);
-
-            Log.ExecutingFileResult(Logger, result);
-
-            long? fileLength = null;
-            if (result.FileStream.CanSeek)
-            {
-                fileLength = result.FileStream.Length;
-            }
-
-            var (range, rangeLength, serveBody) = SetHeadersAndLog(
-                context,
-                result,
-                fileLength,
-                result.EnableRangeProcessing,
-                result.LastModified,
-                result.EntityTag);
-
-            if (!serveBody)
-            {
-                return;
-            }
-
-            await WriteFileAsync(context, result, range, rangeLength);
-        }
-
-        protected virtual Task WriteFileAsync(
-            ActionContext context,
-            FileStreamResult result,
-            RangeItemHeaderValue? range,
-            long rangeLength)
-        {
-            ArgumentNullException.ThrowIfNull(context);
-            ArgumentNullException.ThrowIfNull(result);
-
-            if (range != null && rangeLength == 0)
-                return Task.CompletedTask;
-
-            if (range != null)
-                Log.WritingRangeToBody(Logger);
-
-            return LocalWriteFileAsync(context.HttpContext, result.FileStream, range, rangeLength);
-        }
-
-        private static async Task LocalWriteFileAsync(HttpContext context, Stream fileStream, RangeItemHeaderValue? range, long rangeLength)
-        {
-            Stream body = context.Response.Body;
-
-            _ = 1;
-            try
-            {
-                if (range == null)
-                {
-                    await StreamCopyOperation.CopyToAsync(fileStream, body, null, 65536, context.RequestAborted);
-                    return;
-                }
-
-                fileStream.Seek(range.From.GetValueOrDefault(), SeekOrigin.Begin);
-                await StreamCopyOperation.CopyToAsync(fileStream, body, rangeLength, 65536, context.RequestAborted);
-            }
-            catch (OperationCanceledException)
-            {
-                context.Abort();
-            }
-        }
-
-        private static partial class Log
-        {
-            public static void ExecutingFileResult(ILogger logger, FileResult fileResult)
-            {
-                if (logger.IsEnabled(LogLevel.Information))
-                {
-                    var fileResultType = fileResult.GetType().Name;
-                    ExecutingFileResultWithNoFileName(logger, fileResultType, fileResult.FileDownloadName);
-                }
-            }
-
-            [LoggerMessage(1, LogLevel.Information, "Executing {FileResultType}, sending file with download name '{FileDownloadName}' ...", EventName = "ExecutingFileResultWithNoFileName", SkipEnabledCheck = true)]
-            private static partial void ExecutingFileResultWithNoFileName(ILogger logger, string fileResultType, string fileDownloadName);
-
-            [LoggerMessage(17, LogLevel.Debug, "Writing the requested range of bytes to the body...", EventName = "WritingRangeToBody")]
-            public static partial void WritingRangeToBody(ILogger logger);
+            return File(stream, "image/png", $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png");
         }
     }
 }

@@ -53,6 +53,15 @@ namespace FLB_API
             Program.Logger?.Information(FormatPrefix() + msg);
         }
 
+        public void Debug(string message, params object[] args)
+        {
+            if (Level > LogLevel.Debug)
+                return;
+
+            var msg = string.Format(message, args);
+            Program.Logger?.Debug(FormatPrefix() + msg);
+        }
+
         public void Trace(string message, params object[] args)
         {
             if (Level > LogLevel.Trace)

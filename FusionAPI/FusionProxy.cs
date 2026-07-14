@@ -9,7 +9,7 @@ namespace FusionAPI
 {
     public class FusionProxy(Uri? host = null)
     {
-        public Uri Host { get; set; } = host ?? new("https://fusion.hahoos.dev/");
+        public Uri Host { get; set; } = host ?? new("https://fusionapi.hahoos.dev/");
 
         public HttpClient? Client { get; set; } = new();
 

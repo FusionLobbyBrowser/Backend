@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 using SixLabors.ImageSharp;
@@ -14,17 +15,33 @@ namespace FLB_API.Managers
 
         public static bool IsSetup { get; private set; } = false;
 
+        private static readonly Lock _lock = new();
+
+        private static readonly HttpClient HttpClient = new();
+
         public static async Task Setup()
         {
-            if (IsSetup) return;
-            IsSetup = true;
+            lock (_lock)
+            {
+                if (IsSetup) return;
+                IsSetup = true;
+            }
 
             while (true)
             {
                 await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
-                Program.Logger?.Information($"Starting cleanup process! Processing {Thumbnails.Count} thumbnails...");
-                int removed = Thumbnails.RemoveAll(x => !x.IsThumbnailValid());
-                Program.Logger?.Information($"Removed {removed} thumbnails!");
+                int count;
+                lock (_lock) count = Thumbnails.Count;
+                Program.Logger?.Information($"Starting cleanup process! Processing {count} thumbnails...");
+                List<MemoryThumbnail> toRemove;
+                lock (_lock)
+                {
+                    toRemove = [.. Thumbnails.Where(x => !x.IsThumbnailValid())];
+                    foreach (var r in toRemove)
+                        Thumbnails.Remove(r);
+                }
+
+                Program.Logger?.Information($"Removed {toRemove.Count} thumbnails!");
             }
         }
 
@@ -38,11 +55,10 @@ namespace FLB_API.Managers
                 return null;
             }
 
-            var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GAME_ID}.modapi.io/v1/games/{GAME_ID}/mods/{modId}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GAME_ID}.modapi.io/v1/games/{GAME_ID}/mods/{modId}");
             request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIO_Token}");
             request.Headers.Add("Accept", "application/json");
-            var response = await client.SendAsync(request);
+            using var response = await HttpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
             bool maturity = json.GetProperty("maturity_option").GetInt16() == 8;
@@ -65,20 +81,26 @@ namespace FLB_API.Managers
                 if (modId == -1)
                     return GetWithBarcode(barcode);
 
-                var item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
+                MemoryThumbnail? item;
+                lock (_lock)
+                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
                 {
                     if (item.IsThumbnailValid())
                     {
                         Program.Logger?.Information($"Found cached mod thumbnail for {modId}");
-                        if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
-                            item.Barcodes.Add(barcode);
+                        lock (_lock)
+                        {
+                            if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
+                                item.Barcodes.Add(barcode);
+                        }
                         return item;
                     }
                     else
                     {
                         Program.Logger?.Information("Found an outdated thumbnail, removing...");
-                        Thumbnails.Remove(item);
+                        lock (_lock)
+                            Thumbnails.Remove(item);
                     }
                 }
 
@@ -87,9 +109,13 @@ namespace FLB_API.Managers
                 {
                     var image = await GetImage(remoteThumbnail.ThumbnailUrl);
                     item = new MemoryThumbnail(remoteThumbnail.ModId, image, remoteThumbnail.ExpireTime, remoteThumbnail.IsNSFW);
-                    if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
-                        item.Barcodes.Add(barcode);
-                    Thumbnails.Add(item);
+                    lock (_lock)
+                    {
+                        if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
+                            item.Barcodes.Add(barcode);
+
+                        Thumbnails.Add(item);
+                    }
                     return item;
                 }
                 return null;
@@ -98,6 +124,28 @@ namespace FLB_API.Managers
             {
                 Program.Logger?.Error(ex, $"Error getting mod thumbnail for {modId}");
                 return null;
+            }
+        }
+
+        public static async Task<bool> IsNSFW(long modId, string barcode = "")
+        {
+            try
+            {
+                if (modId == -1)
+                    return GetWithBarcode(barcode)?.IsNSFW ?? false;
+
+                MemoryThumbnail? item;
+                lock (_lock)
+                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
+                if (item != null)
+                    return item.IsNSFW;
+                else
+                    return (await GetRemoteModThumbnailUrl(modId))?.IsNSFW ?? false;
+            }
+            catch (Exception ex)
+            {
+                Program.Logger?.Error(ex, "An unexpected error has occurred while checking if a mod is NSFW");
+                return false;
             }
         }
 
@@ -116,7 +164,9 @@ namespace FLB_API.Managers
             }
 
             Program.Logger?.Information("A barcode was only provided, trying to find an existing cache...");
-            var _item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
+            MemoryThumbnail? _item;
+            lock (_lock)
+                _item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
             // This ignores cache, as level without mod id is quite rare and theres a chance there will be another request to have a mod id associated
             if (_item != null)
             {
@@ -136,17 +186,16 @@ namespace FLB_API.Managers
             return regex.IsMatch(barcode);
         }
 
-        private static async Task<Stream> GetImage(string url)
+        private static async Task<byte[]> GetImage(string url)
         {
-            using HttpClient client = new();
-            var response = await client.GetAsync(url);
+            using var response = await HttpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
-            var bytes = await response.Content.ReadAsStreamAsync();
-            const long min = (1 * 1000 * 1000);
+            await using var bytes = await response.Content.ReadAsStreamAsync();
+            const long min = (1 * 1000 * 500);
             if ((response.Content.Headers.ContentLength > min) || bytes.Length > min)
             {
                 bytes.Position = 0;
-                var img = await Image.LoadAsync(bytes);
+                using var img = await Image.LoadAsync(bytes);
                 if (img.Width > 320 || img.Height > 180)
                 {
                     img.Mutate(x =>
@@ -156,21 +205,26 @@ namespace FLB_API.Managers
                             Mode = ResizeMode.Max
                         })
                     );
-                    var stream = new MemoryStream();
+                    await using var stream = new MemoryStream();
                     await img.SaveAsPngAsync(stream);
-                    await bytes.DisposeAsync();
                     stream.Position = 0;
-                    return stream;
+                    return stream.ToArray();
                 }
                 else
                 {
                     bytes.Position = 0;
-                    return bytes;
+                    await using var stream = new MemoryStream();
+                    await bytes.CopyToAsync(stream);
+                    stream.Position = 0;
+                    return stream.ToArray();
                 }
             }
             else
             {
-                return bytes;
+                await using var stream = new MemoryStream();
+                await bytes.CopyToAsync(stream);
+                stream.Position = 0;
+                return stream.ToArray();
             }
         }
 
@@ -188,10 +242,10 @@ namespace FLB_API.Managers
         public DateTimeOffset? ExpireTime { get; set; } = expire;
     }
 
-    public sealed class MemoryThumbnail(long modId, Stream image, DateTimeOffset? expire, bool isNSFW = false) : IDisposable
+    public sealed class MemoryThumbnail(long modId, byte[] image, DateTimeOffset? expire, bool isNSFW = false)
     {
         public long ModId { get; set; } = modId;
-        public Stream Image { get; set; } = image;
+        public byte[] Image { get; set; } = image;
 
         public bool IsNSFW { get; set; } = isNSFW;
 
@@ -199,13 +253,5 @@ namespace FLB_API.Managers
         public List<string> Barcodes { get; set; } = [];
 
         public DateTimeOffset? ExpireTime { get; set; } = expire;
-
-        public void Dispose()
-        {
-            Image?.Dispose();
-            ModId = -1;
-            Barcodes.Clear();
-            GC.SuppressFinalize(this);
-        }
     }
 }

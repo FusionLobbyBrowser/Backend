@@ -14,6 +14,9 @@ namespace FLB_API
         [JsonPropertyName("steam_token")]
         public string? SteamWebAPI_Token { get; set; }
 
+        [JsonPropertyName("discord_bot_token")]
+        public string? DiscordBotToken { get; set; }
+
         [JsonPropertyName("thumbnail_cache_expire_time")]
         public ulong? ThumbnailCacheExpireTime { get; set; } = 30 * 60;
 
@@ -61,6 +64,9 @@ namespace FLB_API
     {
         [JsonPropertyName("use")]
         public bool Use { get; set; }
+
+        [JsonPropertyName("launchDiscordBot")]
+        public bool LaunchDiscordBot { get; set; }
 
         [JsonPropertyName("logLevel")]
         public string LogLevel_String { get; set; } = "INFO";

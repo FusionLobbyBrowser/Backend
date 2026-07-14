@@ -20,11 +20,11 @@ namespace FLB_API.Controllers
             else if (platform.Equals("Epic", StringComparison.OrdinalIgnoreCase))
                 platformType = Platform.Epic;
             else if (string.IsNullOrWhiteSpace(platform))
-                platformType = Platform.Combine;
+                platformType = Platform.All;
             else
                 return Program.CreateResult("The provided platform does not exist. Leave empty to combine from all available platforms or choose from the following: Steam, Epic", 400);
 
-            if (platformType != Platform.Steam)
+            if (platformType != Platform.All)
             {
                 var handler = platformType == Platform.Steam ? Program.SteamClient : Program.EOSClient;
                 if (handler?.Handler.IsInitialized != true)
@@ -87,9 +87,9 @@ namespace FLB_API.Controllers
 
         public enum Platform
         {
+            All,
             Steam,
-            Epic,
-            Combine
+            Epic
         }
     }
 }

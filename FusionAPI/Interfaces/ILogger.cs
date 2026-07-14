@@ -12,6 +12,7 @@ namespace FusionAPI.Interfaces
 
         public string Prefix { get; set; }
 
+        public void Debug(string message, params object[] args);
         public void Error(string message, params object[] args);
         public void Info(string message, params object[] args);
         public void Trace(string message, params object[] args);
@@ -21,9 +22,10 @@ namespace FusionAPI.Interfaces
         public enum LogLevel
         {
             Trace = 0,
-            Info = 1,
-            Warning = 2,
-            Error = 3,
+            Debug = 1,
+            Info = 2,
+            Warning = 3,
+            Error = 4,
         }
     }
 }
