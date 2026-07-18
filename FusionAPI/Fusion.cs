@@ -59,8 +59,10 @@ namespace FusionAPI
                 netLobbies.Add(metadata.LobbyInfo);
             }
 
+            ServerPrivacy privacy = publicLobbies ? ServerPrivacy.PUBLIC : ServerPrivacy.FRIENDS_ONLY;
+
             LobbiesUptime = LobbiesUptime
-                .Where(y => netLobbies.Any(x => x.Privacy != y.Value.Privacy || x.LobbyID == y.Key))
+                .Where(y => y.Value.Privacy != privacy || netLobbies.Any(x => x.LobbyID == y.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value);
 
             return [.. netLobbies];
