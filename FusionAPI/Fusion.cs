@@ -1,4 +1,5 @@
 ﻿using FusionAPI.Data.Containers;
+using FusionAPI.Data.Enums;
 using FusionAPI.Interfaces;
 
 namespace FusionAPI
@@ -9,7 +10,7 @@ namespace FusionAPI
 
         public IMatchmakingHandler Handler { get; set; } = handler;
 
-        public Dictionary<string, long> LobbiesUptime { get; private set; } = [];
+        public Dictionary<string, UptimeData> LobbiesUptime { get; private set; } = [];
 
         public async Task Initialize(ILogger logger, Dictionary<string, string> metadata)
         {
@@ -36,15 +37,20 @@ namespace FusionAPI
                     continue;
 
                 long uptime;
-                if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out long value))
+                if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out UptimeData value))
                 {
                     var _uptime = DateTimeOffset.Now.ToUnixTimeSeconds();
-                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, _uptime);
+                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, new() { Uptime = _uptime, Privacy = metadata.LobbyInfo!.Privacy });
                     uptime = _uptime;
+                }
+                else if (value.Privacy != metadata.LobbyInfo!.Privacy)
+                {
+                    LobbiesUptime[metadata.LobbyInfo.LobbyID] = new() { Uptime = value.Uptime, Privacy = metadata.LobbyInfo!.Privacy };
+                    uptime = value.Uptime;
                 }
                 else
                 {
-                    uptime = value;
+                    uptime = value.Uptime;
                 }
 
                 metadata.LobbyInfo.LobbyUptime = uptime;
@@ -53,7 +59,9 @@ namespace FusionAPI
                 netLobbies.Add(metadata.LobbyInfo);
             }
 
-            LobbiesUptime = LobbiesUptime.Where(y => netLobbies.Any(x => x.LobbyID == y.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+            LobbiesUptime = LobbiesUptime
+                .Where(y => netLobbies.Any(x => x.Privacy != y.Value.Privacy || x.LobbyID == y.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
 
             return [.. netLobbies];
         }
@@ -69,13 +77,13 @@ namespace FusionAPI
             if (metadata.LobbyInfo == null)
                 return false;
 
-            if (metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.PRIVATE || metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.LOCKED)
+            if (metadata.LobbyInfo.Privacy == ServerPrivacy.PRIVATE || metadata.LobbyInfo.Privacy == ServerPrivacy.LOCKED)
                 return false;
 
-            if(!publicLobbies && metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.PUBLIC)
+            if (!publicLobbies && metadata.LobbyInfo.Privacy == ServerPrivacy.PUBLIC)
                 return false;
 
-            if(!friendsOnlyLobbies && metadata.LobbyInfo.Privacy == Data.Enums.ServerPrivacy.FRIENDS_ONLY)
+            if (!friendsOnlyLobbies && metadata.LobbyInfo.Privacy == ServerPrivacy.FRIENDS_ONLY)
                 return false;
 
             if (!includeFull && metadata.LobbyInfo.PlayerCount == metadata.LobbyInfo.MaxPlayers)
@@ -86,5 +94,11 @@ namespace FusionAPI
 
         internal static bool IsTypeNumber(Type type)
             => type == typeof(int) || type == typeof(long) || type == typeof(ulong);
+    }
+
+    public struct UptimeData
+    {
+        public long Uptime;
+        public ServerPrivacy Privacy;
     }
 }
