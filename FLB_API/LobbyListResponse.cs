@@ -20,12 +20,16 @@ namespace FLB_API
         [JsonPropertyName("interval")]
         public int Interval { get; set; }
 
+        [JsonPropertyName("friends")]
+        public string[] Friends { get; set; }
+
         [JsonConstructor]
-        public LobbyListResponse(LobbyInfo[] lobbies, DateTime date, int interval = 30)
+        public LobbyListResponse(LobbyInfo[] lobbies, DateTime date, int interval = 30, string[]? friends = null)
         {
             Lobbies = lobbies;
             Date = ((DateTimeOffset)date).ToUnixTimeSeconds();
             Interval = interval;
+            Friends = friends ?? [];
             JSON = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
     }

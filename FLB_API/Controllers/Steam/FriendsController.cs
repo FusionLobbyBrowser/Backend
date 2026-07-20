@@ -70,6 +70,19 @@ namespace FLB_API.Controllers.Steam
             Cache.Add(id, cached);
             return cached;
         }
+
+        public static async Task<string[]> GetFriendIDs(ulong id)
+        {
+            var cache = Cache.FirstOrDefault(x => x.Key == id);
+            if (cache.Value?.Friends != null && !((DateTimeOffset.Now - cache.Value.Start).TotalSeconds > CacheTime))
+                return cache.Value.Friends?.Select(x => x.SteamId)?.ToArray() ?? [];
+
+            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebAPI_Token);
+            var user = factory.CreateSteamWebInterface<SteamUser>(ProfileController.HttpClient);
+
+            var list = await user.GetFriendsListAsync(id);
+            return list?.Data?.Select(x => x.SteamId.ToString())?.ToArray() ?? [];
+        }
     }
 
     public class FriendsCache
@@ -88,7 +101,7 @@ namespace FLB_API.Controllers.Steam
 
         public FriendsCache(List<PlayerSummaryModel> friends)
         {
-            Friends = friends?.ConvertAll(x=>new JSONPlayerSummaryModel(x));
+            Friends = friends?.ConvertAll(x => new JSONPlayerSummaryModel(x));
             Start = DateTimeOffset.Now;
         }
 

@@ -1,5 +1,7 @@
 using FLB_API.Controllers.Steam;
+
 using FusionAPI.Data.Containers;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -59,25 +61,22 @@ namespace FLB_API.Controllers
                 {
                     List<LobbyInfo> copy = [.. (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];
 
-                    FriendsCache? friends = null;
+                    string[] friends = [];
                     try
                     {
-                        friends = await FriendsController.GetFriends((ulong)self);
+                        friends = await FriendsController.GetFriendIDs((ulong)self);
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
                         Program.Logger?.Warning("User has friends list private! Cannot fetch friends only lobbies");
                     }
 
-                    if (friends?.Friends != null)
+                    if (friends?.Length > 0)
                     {
-
-
-                        copy = [.. copy.Where(l => friends.Friends.Any(x => x.SteamId == l.LobbyID))];
+                        copy = [.. copy.Where(l => friends.Any(x => x == l.LobbyID))];
                         copy.AddRange(list.Lobbies);
 
-                        list = new LobbyListResponse([.. copy],
-                DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval);
+                        list = new LobbyListResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval, friends);
                     }
                 }
             }

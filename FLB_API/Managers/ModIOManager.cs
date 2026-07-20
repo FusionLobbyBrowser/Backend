@@ -1,9 +1,14 @@
-﻿using System.Text.Json;
+﻿using System.Runtime;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
+using FLB_API.Controllers.Steam;
+
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
+
+using SteamWebAPI2.Utilities;
 
 namespace FLB_API.Managers
 {
@@ -42,6 +47,12 @@ namespace FLB_API.Managers
                 }
 
                 Program.Logger?.Information($"Removed {toRemove.Count} thumbnails!");
+
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+#pragma warning disable S1215
+                // need to improve this later
+                GC.Collect();
+#pragma warning restore S1215
             }
         }
 
