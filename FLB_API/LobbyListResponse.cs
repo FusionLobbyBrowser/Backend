@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FLB_API.Managers;
+
 using FusionAPI.Data.Containers;
 
 namespace FLB_API
@@ -12,7 +14,7 @@ namespace FLB_API
         public string JSON { get; set; }
 
         [JsonPropertyName("lobbies")]
-        public LobbyInfo[] Lobbies { get; set; }
+        public CustomLobbyInfo[] Lobbies { get; set; }
 
         [JsonPropertyName("date")]
         public long Date { get; set; }
@@ -26,7 +28,7 @@ namespace FLB_API
         [JsonConstructor]
         public LobbyListResponse(LobbyInfo[] lobbies, DateTime date, int interval = 30, string[]? friends = null)
         {
-            Lobbies = lobbies;
+            Lobbies = [.. lobbies.Select(l => l.Convert())];
             Date = ((DateTimeOffset)date).ToUnixTimeSeconds();
             Interval = interval;
             Friends = friends ?? [];

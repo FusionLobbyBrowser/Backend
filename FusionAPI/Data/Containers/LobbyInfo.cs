@@ -114,6 +114,48 @@ public class LobbyInfo
 
     [JsonPropertyName("teleportation")]
     public PermissionLevel Teleportation { get; set; } = PermissionLevel.DEFAULT;
+
+    [JsonConstructor]
+    public LobbyInfo()
+    {
+    }
+
+    public LobbyInfo(LobbyInfo old)
+    {
+        LobbyID = old.LobbyID;
+        LobbyCode = old.LobbyCode;
+        LobbyName = old.LobbyName;
+        LobbyDescription = old.LobbyDescription;
+        LobbyPlatform = old.LobbyPlatform;
+        LobbyUptime = old.LobbyUptime;
+        LobbyVersion = old.LobbyVersion;
+        LobbyHostName = old.LobbyHostName;
+        PlayerCount = old.PlayerCount;
+        PlayerList = new(old.PlayerList);
+        LevelTitle = old.LevelTitle;
+        LevelBarcode = old.LevelBarcode;
+        LevelModID = old.LevelModID;
+        GamemodeTitle = old.GamemodeTitle;
+        GamemodeBarcode = old.GamemodeBarcode;
+        TimeBetweenGamemodeRounds = old.TimeBetweenGamemodeRounds;
+        NameTags = old.NameTags;
+        Privacy = old.Privacy;
+        SlowMoMode = old.SlowMoMode;
+        MaxPlayers = old.MaxPlayers;
+        VoiceChat = old.VoiceChat;
+        PlayerConstraining = old.PlayerConstraining;
+        Mortality = old.Mortality;
+        FriendlyFire = old.FriendlyFire;
+        Knockout = old.Knockout;
+        KnockoutLength = old.KnockoutLength;
+        MaxAvatarHeight = old.MaxAvatarHeight;
+        DevTools = old.DevTools;
+        Constrainer = old.Constrainer;
+        CustomAvatars = old.CustomAvatars;
+        Kicking = old.Kicking;
+        Banning = old.Banning;
+        Teleportation = old.Teleportation;
+    }
 }
 
 public class NumberToStringConverter : JsonConverter<string>

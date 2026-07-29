@@ -68,7 +68,7 @@ namespace FLB_API.Controllers
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
-                        Program.Logger?.Warning("User has friends list private! Cannot fetch friends only lobbies");
+                        Program.Logger?.Error(ex, "User has friends list private! Cannot fetch friends only lobbies");
                     }
 
                     if (friends?.Length > 0)

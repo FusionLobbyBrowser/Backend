@@ -1,20 +1,19 @@
 ﻿using System.Runtime;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
-using FLB_API.Controllers.Steam;
+using FusionAPI.Data.Containers;
 
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
-
-using SteamWebAPI2.Utilities;
 
 namespace FLB_API.Managers
 {
     public static partial class ModIOManager
     {
         private const int GAME_ID = 3809;
+
+        private const int COLLECTION_ID = 92630;
 
         internal readonly static List<MemoryThumbnail> Thumbnails = new(1000);
 
@@ -24,6 +23,10 @@ namespace FLB_API.Managers
 
         private static readonly HttpClient HttpClient = new();
 
+        private static List<int> _furryMods = [];
+
+        public static IReadOnlyList<int> FurryMods => _furryMods.AsReadOnly();
+
         public static async Task Setup()
         {
             lock (_lock)
@@ -32,6 +35,14 @@ namespace FLB_API.Managers
                 IsSetup = true;
             }
 
+            try
+            {
+                _ = FetchAvatarsFromCollection();
+            }
+            catch (Exception ex)
+            {
+                Program.Logger?.Error(ex, "An unexpected error has occurred while fetching avatars from collection");
+            }
             while (true)
             {
                 await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
@@ -53,6 +64,14 @@ namespace FLB_API.Managers
                 // need to improve this later
                 GC.Collect();
 #pragma warning restore S1215
+                try
+                {
+                    await FetchAvatarsFromCollection();
+                }
+                catch (Exception ex)
+                {
+                    Program.Logger?.Error(ex, "An unexpected error has occurred while fetching avatars from collection");
+                }
             }
         }
 
@@ -82,6 +101,55 @@ namespace FLB_API.Managers
                 return null;
             else
                 return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60))), maturity);
+        }
+
+        public static async Task FetchAvatarsFromCollection()
+        {
+            Program.Logger?.Information($"Getting avatars from collection {COLLECTION_ID}");
+
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIO_Token) || Program.Settings.ModIO_Token == "your-token")
+            {
+                Program.Logger?.Warning("Mod.io token is not set. Cannot fetch mods.");
+                return;
+            }
+
+            int offset = 0;
+            int total = -1;
+            List<int> mods = [];
+
+            do
+            {
+                Program.Logger?.Information($"Fetching avatars... ({offset} offset out of {(total == -1 ? "unknown" : total.ToString())})");
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GAME_ID}.modapi.io/v1/games/{GAME_ID}/collections/{COLLECTION_ID}/mods?_offset={offset}");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIO_Token}");
+                request.Headers.Add("Accept", "application/json");
+                using var response = await HttpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    Program.Logger?.Error($"Failed to fetch avatars from collection. Status code: {response.StatusCode} ({response.ReasonPhrase})\n{body}");
+                    return;
+                }
+                var json = JsonSerializer.Deserialize<JsonDocument>(body);
+                json?.RootElement.GetProperty("data").EnumerateArray().ToList().ForEach(x =>
+                {
+                    var id = x.GetProperty("id").GetInt32();
+                    var isAvatar = x.GetProperty("tags").EnumerateArray().Any(t => t.GetProperty("name").GetString() == "Avatar");
+                    if (isAvatar && id != 3862839 && id != 5782395 && !mods.Contains(id))
+                        mods.Add(id);
+                });
+                total = json?.RootElement.GetProperty("result_total").GetInt32() ?? -1;
+                offset += 50;
+            }
+            while (total > offset);
+            _furryMods = mods;
+            Program.Logger?.Information($"Updated list, now has {mods.Count} furry mods");
+        }
+
+        public static CustomLobbyInfo Convert(this LobbyInfo info)
+        {
+            bool hasFurries = info.PlayerList?.Players?.Any(p => FurryMods.Contains(p.AvatarModID)) ?? false;
+            return new CustomLobbyInfo(info, hasFurries);
         }
 
         public static async Task<MemoryThumbnail?> GetModThumbnail(long modId, string barcode = "")
