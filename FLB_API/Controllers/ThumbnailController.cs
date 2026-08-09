@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FLB_API.Controllers
 {
     [ApiController]
-    [Route("[controller]/{modIdString}")]
+    [Route("[controller]/{modId}")]
     public class ThumbnailController : ControllerBase
     {
         private static readonly Dictionary<string, string> _vanilla = new()
