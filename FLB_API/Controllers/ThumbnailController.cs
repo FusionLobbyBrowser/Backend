@@ -1,16 +1,11 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using FLB_API.Managers;
 
-using FLB_API.Managers;
-
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.Net.Http.Headers;
 
 namespace FLB_API.Controllers
 {
     [ApiController]
-    [Route("[controller]/{modId}")]
+    [Route("[controller]/{modIdString}")]
     public class ThumbnailController : ControllerBase
     {
         private static readonly Dictionary<string, string> _vanilla = new()
@@ -74,20 +69,20 @@ namespace FLB_API.Controllers
 
         [HttpGet(Name = "GetThumbnail")]
         [Produces("image/png")]
-        public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modId, [FromQuery(Name = "barcode")] string barcode = "")
+        public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modIdString, [FromQuery(Name = "barcode")] string barcode = "")
         {
-            if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
+            if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))
                 return Program.CreateResult("modId is required.", 400);
 
-            if (!long.TryParse(modId, out long _modId) && string.IsNullOrWhiteSpace(barcode))
+            if (!long.TryParse(modIdString, out var modId) && string.IsNullOrWhiteSpace(barcode))
                 return Program.CreateResult("modId is not valid.", 400);
 
             MemoryThumbnail? thumbnail;
-            if (_modId != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out string? fileName))
+            if (modId != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
             {
                 try
                 {
-                    thumbnail = await ModIOManager.GetModThumbnail(_modId, barcode);
+                    thumbnail = await ModIOManager.GetModThumbnail(modId, barcode);
                     if (thumbnail == null)
                         return Program.CreateResult("Thumbnail not found.", 404);
                 }
@@ -110,14 +105,15 @@ namespace FLB_API.Controllers
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues(["ModIO-Maturity", "Server-Uptime"]);
-            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
+            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
             Response.Headers.Append("ModIO-Maturity", thumbnail.IsNsfw ? "nsfw" : "safe");
 
-            var stream = new MemoryStream(thumbnail.Image, false)
-            {
-                Position = 0,
-            };
-            return File(stream, "image/png", $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png");
+            var name = $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png";
+            if (thumbnail.Image != null)
+                return File(thumbnail.Image, "image/png", name);
+
+            Program.Logger?.Error("The thumbnail for {0} was null.", modId);
+            return Program.CreateResult("An error occurred while fetching the thumbnail", 500);
         }
     }
 }

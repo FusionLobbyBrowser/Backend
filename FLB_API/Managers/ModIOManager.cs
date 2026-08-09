@@ -15,7 +15,7 @@ namespace FLB_API.Managers
 
         private const int CollectionId = 92630;
 
-        internal static readonly List<MemoryThumbnail> THUMBNAILS = new(1000);
+        internal static readonly List<MemoryThumbnail> Thumbnails = new(1000);
 
         public static bool IsSetup { get; private set; } = false;
 
@@ -47,14 +47,20 @@ namespace FLB_API.Managers
             {
                 await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
                 int count;
-                lock (Lock) count = THUMBNAILS.Count;
+                lock (Lock) count = Thumbnails.Count;
                 Program.Logger?.Information("Starting cleanup process! Processing {0} thumbnails...", count);
                 List<MemoryThumbnail> toRemove;
                 lock (Lock)
                 {
-                    toRemove = [.. THUMBNAILS.Where(x => !x.IsThumbnailValid())];
+                    toRemove = [.. Thumbnails.Where(x => !x.IsThumbnailValid())];
                     foreach (var r in toRemove)
-                        THUMBNAILS.Remove(r);
+                    {
+                        r.Image = null;
+                        r.Barcodes = null;
+                        r.ExpireTime = null;
+                        r.ModId = -1;
+                        Thumbnails.Remove(r);
+                    }
                 }
 
                 Program.Logger?.Information("Removed {0} thumbnails!", toRemove.Count);
@@ -159,7 +165,7 @@ namespace FLB_API.Managers
 
                 MemoryThumbnail? item;
                 lock (Lock)
-                    item = THUMBNAILS.FirstOrDefault(x => x.ModId == modId);
+                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
                 {
                     if (item.IsThumbnailValid())
@@ -176,7 +182,7 @@ namespace FLB_API.Managers
                     {
                         Program.Logger?.Information("Found an outdated thumbnail, removing...");
                         lock (Lock)
-                            THUMBNAILS.Remove(item);
+                            Thumbnails.Remove(item);
                     }
                 }
 
@@ -190,7 +196,7 @@ namespace FLB_API.Managers
                     if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
                         item.Barcodes.Add(barcode);
 
-                    THUMBNAILS.Add(item);
+                    Thumbnails.Add(item);
                 }
                 return item;
             }
@@ -210,7 +216,7 @@ namespace FLB_API.Managers
 
                 MemoryThumbnail? item;
                 lock (Lock)
-                    item = THUMBNAILS.FirstOrDefault(x => x.ModId == modId);
+                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
                     return item.IsNsfw;
                 else
@@ -240,7 +246,7 @@ namespace FLB_API.Managers
             Program.Logger?.Information("A barcode was only provided, trying to find an existing cache...");
             MemoryThumbnail? item;
             lock (Lock)
-                item = THUMBNAILS.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
+                item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
             // This ignores cache, as level without mod id is quite rare and there's a chance there will be another request to have a mod id associated
             if (item != null)
             {
@@ -319,13 +325,21 @@ namespace FLB_API.Managers
     public sealed class MemoryThumbnail(long modId, byte[] image, DateTimeOffset? expire, bool isNsfw = false)
     {
         public long ModId { get; set; } = modId;
-        public byte[] Image { get; set; } = image;
+        public byte[]? Image { get; set; } = image;
 
         public bool IsNsfw { get; set; } = isNsfw;
 
         // Sometimes the levels do not have a mod id associated, this will be used to counter that
-        public List<string> Barcodes { get; set; } = [];
+        public List<string>? Barcodes { get; set; } = [];
 
         public DateTimeOffset? ExpireTime { get; set; } = expire;
+
+        ~MemoryThumbnail()
+        {
+            Image = null;
+            Barcodes = null;
+            ExpireTime = null;
+            ModId = -1;
+        }
     }
 }
