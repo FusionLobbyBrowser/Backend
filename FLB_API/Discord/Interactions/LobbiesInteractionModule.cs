@@ -1,4 +1,5 @@
 ﻿using FLB_API.Discord.Commands;
+
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
@@ -20,38 +21,38 @@ namespace FLB_API.Discord.Interactions
         [ComponentInteraction("button_next")]
         public async Task<InteractionMessageProperties> NextPage(int platform, int page, int pages)
         {
-            Platform _platform = (Platform)platform;
+            var platformEnum = (Platform)platform;
             if (page == pages)
                 return DiscordBotManager.Error(NO_MORE_PAGES);
             page++;
-            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(_platform, page).Components);
+            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, page).Components);
             return new InteractionMessageProperties().WithContent(string.Format(ADVANCE_MSG, page)).WithFlags(MessageFlags.Ephemeral);
         }
 
         [ComponentInteraction("button_previous")]
         public async Task<InteractionMessageProperties> PreviousPage(int platform, int page)
         {
-            Platform _platform = (Platform)platform;
+            var platformEnum = (Platform)platform;
             if (page == 1)
                 return DiscordBotManager.Error(NO_MORE_PAGES);
             page--;
-            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(_platform, page).Components);
+            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, page).Components);
             return new InteractionMessageProperties().WithContent(string.Format(RETURN_MSG, page)).WithFlags(MessageFlags.Ephemeral);
         }
 
         [ComponentInteraction("button_currentPage")]
         public async Task<InteractionMessageProperties> PreviousPage(int platform)
         {
-            Platform _platform = (Platform)platform;
-            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(_platform, 1).Components);
+            var platformEnum = (Platform)platform;
+            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, 1).Components);
             return new InteractionMessageProperties().WithContent(string.Format(RETURN_MSG, 1)).WithFlags(MessageFlags.Ephemeral);
         }
 
         [ComponentInteraction("button_refresh")]
         public async Task<InteractionMessageProperties> Refresh(int platform, int page)
         {
-            Platform _platform = (Platform)platform;
-            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(_platform, page).Components);
+            var platformEnum = (Platform)platform;
+            await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, page).Components);
             return new InteractionMessageProperties().WithContent("Refreshed!").WithFlags(MessageFlags.Ephemeral);
         }
 

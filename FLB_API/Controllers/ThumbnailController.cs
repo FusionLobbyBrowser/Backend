@@ -93,7 +93,7 @@ namespace FLB_API.Controllers
                 }
                 catch (Exception ex)
                 {
-                    Program.Logger?.Error(ex, $"Error fetching thumbnail for {modId}");
+                    Program.Logger?.Error(ex, "Error fetching thumbnail for {0}", modId);
                     return Program.CreateResult("An error occurred while fetching the thumbnail", 500);
                 }
             }
@@ -102,16 +102,16 @@ namespace FLB_API.Controllers
                 var file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Vanilla", $"{fileName}.webp");
                 if (!System.IO.File.Exists(file))
                 {
-                    Program.Logger?.Error($"The directory/file for the vanilla thumbnail was not found! Barcode: {barcode} ... File Name: {fileName}.webp");
+                    Program.Logger?.Error("The directory/file for the vanilla thumbnail was not found! Barcode: {0} ... File Name: {1}.webp", barcode, fileName);
                     return Program.CreateResult("Thumbnail not found. (Vanilla thumbnail missing)", 404);
                 }
 
-                thumbnail = new(-1, await System.IO.File.ReadAllBytesAsync(file), null);
+                thumbnail = new MemoryThumbnail(-1, await System.IO.File.ReadAllBytesAsync(file), null);
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues(["ModIO-Maturity", "Server-Uptime"]);
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
-            Response.Headers.Append("ModIO-Maturity", thumbnail.IsNSFW ? "nsfw" : "safe");
+            Response.Headers.Append("ModIO-Maturity", thumbnail.IsNsfw ? "nsfw" : "safe");
 
             var stream = new MemoryStream(thumbnail.Image, false)
             {

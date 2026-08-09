@@ -45,23 +45,23 @@ namespace FusionAPI
         {
             var info = new LobbyMetadataInfo()
             {
-                HasLobbyOpen = lobby.GetData(LobbyKeys.HasLobbyOpenKey) == bool.TrueString,
-                LobbyCode = lobby.GetData(LobbyKeys.LobbyCodeKey),
-                Game = lobby.GetData(LobbyKeys.GameKey),
-                Full = lobby.GetData(LobbyKeys.FullKey) == bool.TrueString,
+                HasLobbyOpen = lobby.GetData(LobbyKeys.HAS_LOBBY_OPEN_KEY) == bool.TrueString,
+                LobbyCode = lobby.GetData(LobbyKeys.LOBBY_CODE_KEY),
+                Game = lobby.GetData(LobbyKeys.GAME_KEY),
+                Full = lobby.GetData(LobbyKeys.FULL_KEY) == bool.TrueString,
             };
 
-            if (lobby.TryGetData(LobbyKeys.PrivacyKey, out var rawPrivacy) && int.TryParse(rawPrivacy, out var privacyInt))
+            if (lobby.TryGetData(LobbyKeys.PRIVACY_KEY, out var rawPrivacy) && int.TryParse(rawPrivacy, out var privacyInt))
             {
                 info.Privacy = (ServerPrivacy)privacyInt;
             }
 
-            if (lobby.TryGetData(LobbyKeys.VersionMajorKey, out var rawVersionMajor) && int.TryParse(rawVersionMajor, out var versionMajorInt))
+            if (lobby.TryGetData(LobbyKeys.VERSION_MAJOR_KEY, out var rawVersionMajor) && int.TryParse(rawVersionMajor, out var versionMajorInt))
             {
                 info.VersionMajor = versionMajorInt;
             }
 
-            if (lobby.TryGetData(LobbyKeys.VersionMinorKey, out var rawVersionMinor) && int.TryParse(rawVersionMinor, out var versionMinorInt))
+            if (lobby.TryGetData(LobbyKeys.VERSION_MINOR_KEY, out var rawVersionMinor) && int.TryParse(rawVersionMinor, out var versionMinorInt))
             {
                 info.VersionMinor = versionMinorInt;
             }

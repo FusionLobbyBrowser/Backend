@@ -1,5 +1,6 @@
 ﻿using FLB_API.Discord.Commands;
 using FLB_API.Discord.Interactions;
+
 using FusionAPI.Data.Containers;
 
 using NetCord;
@@ -29,9 +30,9 @@ namespace FLB_API.Discord
                 return;
             }
 
-            Client = new GatewayClient(new BotToken(Program.Settings.DiscordBotToken), new()
+            Client = new GatewayClient(new BotToken(Program.Settings.DiscordBotToken), new GatewayClientConfiguration
             {
-                Intents = default,
+                Intents = null,
                 Logger = new SerilogLogger(Logger) { Level = LogLevel.Trace },
             });
             ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext> applicationCommandService = new();
@@ -46,15 +47,24 @@ namespace FLB_API.Discord
             {
                 IExecutionResult result;
 
-                // Check if the interaction is an application command interaction
-                if (interaction is ApplicationCommandInteraction applicationCommandInteraction)
-                    result = await applicationCommandService.ExecuteAsync(new ApplicationCommandContext(applicationCommandInteraction, Client));
-                else if (interaction is ButtonInteraction buttonInteraction)
-                    result = await interactionService.ExecuteAsync(new ButtonInteractionContext(buttonInteraction, Client));
-                else if (interaction is AutocompleteInteraction autocompleteInteraction)
-                    result = await applicationCommandService.ExecuteAutocompleteAsync(new AutocompleteInteractionContext(autocompleteInteraction, Client));
-                else
-                    return;
+                switch (interaction)
+                {
+                    // Check if the interaction is an application command interaction
+                    case ApplicationCommandInteraction applicationCommandInteraction:
+                        result = await applicationCommandService.ExecuteAsync(new ApplicationCommandContext(applicationCommandInteraction, Client));
+                        break;
+
+                    case ButtonInteraction buttonInteraction:
+                        result = await interactionService.ExecuteAsync(new ButtonInteractionContext(buttonInteraction, Client));
+                        break;
+
+                    case AutocompleteInteraction autocompleteInteraction:
+                        result = await applicationCommandService.ExecuteAutocompleteAsync(new AutocompleteInteractionContext(autocompleteInteraction, Client));
+                        break;
+
+                    default:
+                        return;
+                }
 
                 // Check if the execution failed
                 if (result is not IFailResult failResult)
@@ -67,6 +77,7 @@ namespace FLB_API.Discord
                 }
                 catch
                 {
+                    // ignored
                 }
             };
             Client.Ready += async ready => await Status();
@@ -76,11 +87,13 @@ namespace FLB_API.Discord
         }
 
         public static async Task Status()
-        { 
-            if(Client != null)
+        {
+            if (Client != null)
                 await Client.UpdatePresenceAsync(
-                    new PresenceProperties(UserStatusType.Online) {
-                        Activities = [new($"over {Program.Lobbies?.Lobbies?.Length ?? 0} lobbies!", UserActivityType.Watching)] }); 
+                    new PresenceProperties(UserStatusType.Online)
+                    {
+                        Activities = [new UserActivityProperties($"over {Program.Lobbies?.Lobbies?.Length ?? 0} lobbies!", UserActivityType.Watching)]
+                    });
         }
 
         public static string GetLobbyName(this LobbyInfo lobby)
@@ -95,7 +108,7 @@ namespace FLB_API.Discord
                 Title = title,
                 Description = message,
                 Url = "https://fusion.hahoos.dev/",
-                Color = new(255, 82, 38),
+                Color = new Color(255, 82, 38),
                 Timestamp = DateTimeOffset.Now,
             }).WithFlags(MessageFlags.Ephemeral);
         }
@@ -107,25 +120,41 @@ namespace FLB_API.Discord
 
         public LogLevel Level { get; set; } = LogLevel.Trace;
 
-        public bool IsEnabled(NetCord.Logging.LogLevel logLevel)
+        public bool IsEnabled(LogLevel logLevel)
             => logLevel >= Level;
 
-        public void Log<TState>(NetCord.Logging.LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public void Log<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            if (logLevel == LogLevel.Information)
-                Logger?.Info(formatter.Invoke(state, exception));
-            else if (logLevel == LogLevel.Warning)
-                Logger?.Warning(formatter.Invoke(state, exception));
-            else if (logLevel == LogLevel.Error)
-                Logger?.Error(formatter.Invoke(state, exception));
-            else if (logLevel == LogLevel.Debug)
-                Logger?.Debug(formatter.Invoke(state, exception));
-            else if (logLevel == LogLevel.Trace)
-                Logger?.Trace(formatter.Invoke(state, exception));
-            else if (logLevel == LogLevel.Critical)
-                Logger?.Error($"[CRITICAL] {formatter.Invoke(state, exception)}");
-            else if (logLevel == LogLevel.None)
-                Logger?.Info($"[NONE] {formatter.Invoke(state, exception)}");
+            switch (logLevel)
+            {
+                case LogLevel.Information:
+                    Logger?.Info(formatter.Invoke(state, exception));
+                    break;
+
+                case LogLevel.Warning:
+                    Logger?.Warning(formatter.Invoke(state, exception));
+                    break;
+
+                case LogLevel.Error:
+                    Logger?.Error(formatter.Invoke(state, exception));
+                    break;
+
+                case LogLevel.Debug:
+                    Logger?.Debug(formatter.Invoke(state, exception));
+                    break;
+
+                case LogLevel.Trace:
+                    Logger?.Trace(formatter.Invoke(state, exception));
+                    break;
+
+                case LogLevel.Critical:
+                    Logger?.Error($"[CRITICAL] {formatter.Invoke(state, exception)}");
+                    break;
+
+                case LogLevel.None:
+                    Logger?.Info($"[NONE] {formatter.Invoke(state, exception)}");
+                    break;
+            }
         }
     }
 }

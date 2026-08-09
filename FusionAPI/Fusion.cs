@@ -37,15 +37,15 @@ namespace FusionAPI
                     continue;
 
                 long uptime;
-                if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out UptimeData value))
+                if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out var value))
                 {
-                    var _uptime = DateTimeOffset.Now.ToUnixTimeSeconds();
-                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, new() { Uptime = _uptime, Privacy = metadata.LobbyInfo!.Privacy });
-                    uptime = _uptime;
+                    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, new UptimeData { Uptime = now, Privacy = metadata.LobbyInfo!.Privacy });
+                    uptime = now;
                 }
                 else if (value.Privacy != metadata.LobbyInfo!.Privacy)
                 {
-                    LobbiesUptime[metadata.LobbyInfo.LobbyID] = new() { Uptime = value.Uptime, Privacy = metadata.LobbyInfo!.Privacy };
+                    LobbiesUptime[metadata.LobbyInfo.LobbyID] = value with { Privacy = metadata.LobbyInfo!.Privacy };
                     uptime = value.Uptime;
                 }
                 else
@@ -59,7 +59,7 @@ namespace FusionAPI
                 netLobbies.Add(metadata.LobbyInfo);
             }
 
-            ServerPrivacy privacy = publicLobbies ? ServerPrivacy.PUBLIC : ServerPrivacy.FRIENDS_ONLY;
+            var privacy = publicLobbies ? ServerPrivacy.PUBLIC : ServerPrivacy.FRIENDS_ONLY;
 
             LobbiesUptime = LobbiesUptime
                 .Where(y => y.Value.Privacy != privacy || netLobbies.Any(x => x.LobbyID == y.Key))
@@ -79,7 +79,7 @@ namespace FusionAPI
             if (metadata.LobbyInfo == null)
                 return false;
 
-            if (metadata.LobbyInfo.Privacy == ServerPrivacy.PRIVATE || metadata.LobbyInfo.Privacy == ServerPrivacy.LOCKED)
+            if (metadata.LobbyInfo.Privacy is ServerPrivacy.PRIVATE or ServerPrivacy.LOCKED)
                 return false;
 
             if (!publicLobbies && metadata.LobbyInfo.Privacy == ServerPrivacy.PUBLIC)

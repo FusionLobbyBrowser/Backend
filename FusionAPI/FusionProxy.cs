@@ -15,7 +15,7 @@ namespace FusionAPI
 
         public LobbyInfo[] GetLobbies(string platform = "")
         {
-            Client ??= new();
+            Client ??= new HttpClient();
 
             var url = new Uri(Host, !string.IsNullOrWhiteSpace(platform) ? $"lobbylist?platform={platform}" : "lobbylist");
             var task = Client.GetStringAsync(url);
@@ -28,23 +28,17 @@ namespace FusionAPI
 
         public PlayerSummaryModel? GetSteamProfile(long platformID)
         {
-            Client ??= new();
+            Client ??= new HttpClient();
 
             var url = new Uri(Host, $"steam/profile/{platformID}");
             var task = Client.GetStringAsync(url);
             task.Wait();
-            if (task.IsCompletedSuccessfully)
-                return JsonSerializer.Deserialize<PlayerSummaryModel>(task.Result);
-
-            return null;
+            return task.IsCompletedSuccessfully ? JsonSerializer.Deserialize<PlayerSummaryModel>(task.Result) : null;
         }
 
         public Uri GetThumbnailURL(long modId, string barcode = "")
         {
-            if (string.IsNullOrWhiteSpace(barcode))
-                return new Uri(Host, $"thumbnail/{modId}");
-            else
-                return new Uri(Host, $"thumbnail/{modId}?barcode={barcode}");
+            return string.IsNullOrWhiteSpace(barcode) ? new Uri(Host, $"thumbnail/{modId}") : new Uri(Host, $"thumbnail/{modId}?barcode={barcode}");
         }
     }
 

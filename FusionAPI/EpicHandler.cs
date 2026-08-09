@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 
 using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
+
 using FusionAPI.Data.Enums;
-using FusionAPI.EOS.Auth;
-using FusionAPI.EOS.Core;
+using FusionAPI.EOS;
 using FusionAPI.Epic;
 using FusionAPI.Interfaces;
 
@@ -15,11 +15,9 @@ namespace FusionAPI
     {
         private static bool DLLResolverConfigured { get; set; } = false;
 
-        public bool IsInitialized => EOSManager?.IsInitialized ?? false;
+        public bool IsInitialized => Runtime.IsInitialized;
 
-        internal EOSManager EOSManager { get; private set; }
-
-        internal EOSAuthManager AuthManager { get; private set; }
+        internal EOSRuntime Runtime { get; private set; }
 
         public ILogger Logger { get; private set; }
 
@@ -33,81 +31,51 @@ namespace FusionAPI
 
         public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
-            var options = new CreateLobbySearchOptions
+            var createLobbySearchOptions = new CreateLobbySearchOptions
             {
                 MaxResults = 200
             };
 
-            LobbySearch? searchHandle = null;
-
-            if (!AuthManager.IsLoggedIn)
+            var result = Runtime.Lobby.LobbyInterface.CreateLobbySearch(ref createLobbySearchOptions, out var searchHandle);
+            if (result != Result.Success || searchHandle == null)
             {
-                Logger.Error("Failed to get lobbies, not logged into EOS!");
+                Logger.Error($"Failed to create lobby search: {result}");
                 return [];
             }
 
-            var res = EOSInterfaces.Lobby?.CreateLobbySearch(ref options, out searchHandle);
+            SetParameter(ref searchHandle, LobbyKeys.HAS_LOBBY_OPEN_KEY, bool.TrueString, ComparisonOp.Equal);
+            SetParameter(ref searchHandle, LobbyKeys.IDENTIFIER_KEY, bool.TrueString, ComparisonOp.Equal);
+            SetParameter(ref searchHandle, LobbyKeys.GAME_KEY, "BONELAB", ComparisonOp.Equal);
 
-            if (res != Result.Success)
+            SetParameter(ref searchHandle, LobbyKeys.PRIVACY_KEY, ((int)ServerPrivacy.PUBLIC).ToString(), ComparisonOp.Equal);
+
+            var lobbySearchFindOptions = new LobbySearchFindOptions
             {
-                Logger.Error($"Failed to create lobby search handle: {res}");
-                return [];
-            }
-
-            var identifierParam = new LobbySearchSetParameterOptions
-            {
-                Parameter = new AttributeData
-                {
-                    Key = LobbyKeys.IdentifierKey,
-                    Value = bool.TrueString,
-                },
-                ComparisonOp = ComparisonOp.Equal,
-            };
-
-            if (searchHandle == null)
-            {
-                Logger.Error("LobbySearch handle is null after creation");
-                return [];
-            }
-
-            searchHandle.SetParameter(ref identifierParam);
-
-            if(AuthManager?.LocalUserId == null)
-            {
-                Logger.Error("LocalUserId is null, cannot proceed with lobby search.");
-                return [];
-            }
-
-            var findOptions = new LobbySearchFindOptions
-            {
-                LocalUserId = AuthManager.LocalUserId
+                LocalUserId = Runtime.Connect.LocalUserId
             };
 
             var tcs = new TaskCompletionSource<IMatchmakingLobby[]>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
 
-            searchHandle.Find(ref findOptions, null, (ref info) =>
+            searchHandle.Find(ref lobbySearchFindOptions, null, (ref LobbySearchFindCallbackInfo info) =>
             {
                 if (info.ResultCode != Result.Success)
                 {
-                    Logger.Error($"Failed to find lobbies: {info.ResultCode}");
+                    Logger.Error($"EOS lobby search failed: {info.ResultCode}");
                     if (!tcs.TrySetResult([]))
                         Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
+                    searchHandle.Release();
                     return;
                 }
 
                 var countOptions = new LobbySearchGetSearchResultCountOptions();
                 var lobbyCount = searchHandle.GetSearchResultCount(ref countOptions);
 
-                if (lobbyCount == 0)
-                {
-                    Logger.Trace("No lobbies found.");
-                    if (!tcs.TrySetResult([]))
-                        Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
-                    return;
-                }
+#if DEBUG
+                Logger.Info($"Lobbies Found: {lobbyCount}");
+#endif
 
-                var lobbyDetailsToProcess = new List<LobbyDetails>((int)lobbyCount);
+                List<IMatchmakingLobby> lobbies = new((int)lobbyCount);
 
                 for (uint i = 0; i < lobbyCount; i++)
                 {
@@ -116,30 +84,53 @@ namespace FusionAPI
                         LobbyIndex = i
                     };
 
-                    if (searchHandle.CopySearchResultByIndex(ref copyOptions, out var lobbyDetails) == Result.Success
-                        && lobbyDetails != null)
+                    if (searchHandle.CopySearchResultByIndex(ref copyOptions, out var lobbyDetails) != Result.Success || lobbyDetails == null)
+                        continue;
+
+                    var infoOptions = new LobbyDetailsCopyInfoOptions();
+                    if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
                     {
-                        lobbyDetailsToProcess.Add(lobbyDetails);
-                    }
-                }
-
-                var lobbies = new List<IMatchmakingLobby>(lobbyDetailsToProcess.Count);
-
-                foreach (var lobbyDetails in lobbyDetailsToProcess)
-                {
-                    var lobby = ProcessSingleLobby(lobbyDetails);
-                    if (lobby != null)
-                        lobbies.Add(lobby);
-                    else
                         lobbyDetails.Release();
+                        continue;
+                    }
+
+                    if (lobbyInfo.Value.LobbyOwnerUserId == null)
+                    {
+                        lobbyDetails.Release();
+                        continue;
+                    }
+
+                    var processed = ProcessSingleLobby(lobbyDetails, publicLobbies, friendsOnlyLobbies);
+                    if (processed != null)
+                        lobbies.Add(processed);
                 }
+
+                searchHandle.Release();
 
                 if (!tcs.TrySetResult([.. lobbies]))
                     Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
             });
 
             _lastFetch = DateTime.Now;
+
             return await tcs.Task;
+        }
+
+        private void SetParameter(ref LobbySearch searchHandle, string key, string value, ComparisonOp comparisonOp)
+        {
+            var lobbySearchSetParameterOptions = new LobbySearchSetParameterOptions
+            {
+                Parameter = new AttributeData
+                {
+                    Key = key,
+                    Value = value,
+                },
+                ComparisonOp = comparisonOp,
+            };
+
+            var result = searchHandle.SetParameter(ref lobbySearchSetParameterOptions);
+            if (result != Result.Success)
+                Logger.Error($"Failed to set lobby search parameter: {result}");
         }
 
         private EpicLobby? ProcessSingleLobby(LobbyDetails lobbyDetails, bool publicLobbies = true, bool friendsOnlyLobbies = false)
@@ -148,40 +139,37 @@ namespace FusionAPI
             var ownerId = lobbyDetails.GetLobbyOwner(ref ownerOptions);
 
             if (ownerId == null)
+            {
+                lobbyDetails.Release();
                 return null;
+            }
 
             var infoOptions = new LobbyDetailsCopyInfoOptions();
             if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
                 return null;
 
-            var networkLobby = new EpicLobby(lobbyDetails, this);
+            var networkLobby = new EpicLobby(Runtime, lobbyDetails, ownerId);
 
-            if (!networkLobby.TryGetData(LobbyKeys.HasLobbyOpenKey, out var hasServerOpen) ||
+            if (!networkLobby.TryGetData(LobbyKeys.HAS_LOBBY_OPEN_KEY, out var hasServerOpen) ||
                 hasServerOpen != bool.TrueString)
             {
+                networkLobby.Dispose();
                 return null;
             }
-
-            if (!networkLobby.TryGetData(LobbyKeys.PrivacyKey, out var privacyStr) || !int.TryParse(privacyStr, out int privacyInt))
-                return null;
-
-            ServerPrivacy privacyLevel = (ServerPrivacy)privacyInt;
-
-            if (!publicLobbies && privacyLevel == ServerPrivacy.PUBLIC)
-                return null;
-            else if (!friendsOnlyLobbies && privacyLevel == ServerPrivacy.FRIENDS_ONLY)
-                return null;
-            else if (privacyLevel == ServerPrivacy.PRIVATE || privacyLevel == ServerPrivacy.LOCKED)
-                return null;
-
 
             var metadata = ReadMetadata(networkLobby);
 
             if (metadata == null)
+            {
+                networkLobby.Dispose();
                 return null;
+            }
 
             if (!metadata.HasLobbyOpen)
+            {
+                networkLobby.Dispose();
                 return null;
+            }
 
             return networkLobby;
         }
@@ -208,10 +196,7 @@ namespace FusionAPI
 
             const string linuxFormat = "libEOSSDK-Linux{0}-Shipping.so";
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                name = string.Format(linuxFormat, IsARM() ? "Arm64" : string.Empty);
-            else
-                name = "EOSSDK-Win64-Shipping.dll";
+            name = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? string.Format(linuxFormat, RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "Arm64" : string.Empty) : "EOSSDK-Win64-Shipping.dll";
 
             var path = Path.Combine(baseDirectory, name);
             Logger.Info("Loading SDK from " + path);
@@ -228,19 +213,19 @@ namespace FusionAPI
 
             Logger.Info("EOS SDK loaded from " + path);
 
-            AuthManager = new EOSAuthManager(logger);
-            EOSManager = new EOSManager(AuthManager, logger);
+            Runtime = new EOSRuntime();
 
-            bool success = await EOSManager.InitializeAsync();
+            var success = await Runtime.InitializeAsync(Logger);
 
             if (success)
+            {
                 Logger.Info("EOS initialized.");
+            }
             else
+            {
                 Logger.Error("EOS initialization failed.");
+            }
         }
-
-        private static bool IsARM()
-            => RuntimeInformation.OSArchitecture == Architecture.Arm64;
 
         private void SetDLLImportResolver()
             => NativeLibrary.SetDllImportResolver(typeof(Common).Assembly, ResolverCallback);
@@ -249,53 +234,39 @@ namespace FusionAPI
             => name.Contains("EOSSDK", StringComparison.OrdinalIgnoreCase) ? EOSHandle : IntPtr.Zero;
     }
 
-    internal class EpicLobby(LobbyDetails details, EOSHandler handler) : IMatchmakingLobby
+    internal class EpicLobby(EOSRuntime runtime, LobbyDetails lobbyDetails, ProductUserId owner) : IMatchmakingLobby, IDisposable
     {
-        public string Owner => GetOwner();
+        public string Owner => (Utf8String)owner;
 
-        public bool IsOwnerMe => ((Utf8String)EOSHandler.AuthManager.LocalUserId) == Owner;
+        public bool IsOwnerMe => ((Utf8String)Runtime.Connect.LocalUserId) == Owner;
 
-        private LobbyDetails Details { get; } = details;
+        private LobbyDetails Details { get; set; } = lobbyDetails;
 
-        private EOSHandler EOSHandler { get; } = handler;
+        private EOSRuntime Runtime { get; } = runtime;
+
+        ~EpicLobby()
+        {
+            Details?.Release();
+            Details = null;
+        }
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            Details?.Release();
+            Details = null;
+        }
 
         public bool TryGetData(string key, out string value)
         {
-            value = string.Empty;
-
-            if (Details == null)
-                return false;
-
-            var options = new LobbyDetailsCopyAttributeByKeyOptions
-            {
-                AttrKey = key
-            };
-
-            var result = Details.CopyAttributeByKey(ref options, out var attribute);
-
-            if (result == Result.Success && attribute.HasValue)
-            {
-                value = attribute.Value.Data?.Value.AsUtf8 ?? string.Empty;
-                return !string.IsNullOrEmpty(value);
-            }
-
-            return false;
+            value = Runtime.Lobby.GetAttribute(Details, key);
+            return !string.IsNullOrWhiteSpace(value);
         }
 
         public string GetData(string key)
         {
             TryGetData(key, out var value);
             return value;
-        }
-
-        private string GetOwner()
-        {
-            var options = new LobbyDetailsGetLobbyOwnerOptions();
-            var id = Details?.GetLobbyOwner(ref options);
-            if (id == null)
-                return string.Empty;
-
-            return (Utf8String)id;
         }
     }
 }

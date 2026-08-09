@@ -17,13 +17,15 @@ using Serilog.Sinks.Spectre;
 
 using Spectre.Console;
 
+using ILogger = FusionAPI.Interfaces.ILogger;
+
 namespace FLB_API
 {
     public static class Program
     {
         public static Fusion? SteamClient { get; private set; }
 
-        public static Fusion? EOSClient { get; private set; }
+        public static Fusion? EpicClient { get; private set; }
 
         internal static Serilog.Core.Logger? Logger { get; private set; }
 
@@ -31,7 +33,7 @@ namespace FLB_API
 
         internal static LobbyListResponse? SteamLobbies { get; private set; }
 
-        internal static LobbyListResponse? EOSLobbies { get; private set; }
+        internal static LobbyListResponse? EpicLobbies { get; private set; }
 
         internal static LobbyListResponse? Lobbies { get; private set; }
 
@@ -48,13 +50,13 @@ namespace FLB_API
         internal static Settings DefaultSettings { get; } = new()
         {
             Interval = 30,
-            ModIO_Token = "your-token",
+            ModIoToken = "your-token",
             Authentication = new Auth()
             {
                 Username = "",
                 Password = "",
             },
-            IMAP = new ImapAuth()
+            Imap = new ImapAuth()
             {
                 Host = "imap.gmail.com",
                 Port = 993,
@@ -81,9 +83,9 @@ namespace FLB_API
             {
                 LoadSettings();
 
-                FusionAPI.Interfaces.ILogger.LogLevel level;
+                ILogger.LogLevel level;
                 string choice;
-                bool preferences = false;
+                var preferences = false;
 
                 if (Settings?.Preferences?.Use == true)
                 {
@@ -91,7 +93,7 @@ namespace FLB_API
                     Logger?.Information("Using saved preferences");
                     level = Settings.Preferences.LogLevel;
                     choice = Settings.Preferences.AuthHandler;
-                    Logger?.Information("Selected log level: " + level.ToString() + ", Selected service: " + choice);
+                    Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
                 }
                 else
                 {
@@ -124,11 +126,11 @@ namespace FLB_API
                 SteamLogger = new Logger(level, "Steam");
                 await SteamClient.Initialize(SteamLogger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
-                EOSClient = new Fusion(new EOSHandler());
+                EpicClient = new Fusion(new EOSHandler());
                 var eosLogger = new Logger(level, "EOS");
-                await EOSClient.Initialize(eosLogger, []);
+                await EpicClient.Initialize(eosLogger, []);
                 Logger?.Information("Successfully initialized EOS API");
-                Handlers.Add(EOSClient.Handler);
+                Handlers.Add(EpicClient.Handler);
                 Uptime = DateTime.UtcNow;
             }
             catch (Exception e)
@@ -161,7 +163,7 @@ namespace FLB_API
                         return Task.CompletedTask;
                     };
                 })
-                .AddSteam(options => options.ApplicationKey = Settings?.SteamWebAPI_Token);
+                .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
 
             builder.Services.AddControllers();
             builder.Services.AddOpenApi();
@@ -169,8 +171,8 @@ namespace FLB_API
             var app = builder.Build();
 
             app.UseHttpsRedirection();
-            app.UseCors((builder) =>
-                builder
+            app.UseCors((policyBuilder) =>
+                policyBuilder
                     .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com", "https://www.hoodrp.com")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
@@ -237,23 +239,23 @@ namespace FLB_API
             return metadata;
         }
 
-        private static async Task<Tuple<FusionAPI.Interfaces.ILogger.LogLevel, string>> AskUser()
+        private static async Task<Tuple<ILogger.LogLevel, string>> AskUser()
         {
             // I FUCKING HATE VISUAL STUDIO, WHY DO I HAVE TO DISABLE 3 FUCKING WARNINGS.
 #pragma warning disable RCS1222
 #pragma warning disable IDE0079
 #pragma warning disable S3878
-            var level = await AnsiConsole.PromptAsync(new SelectionPrompt<FusionAPI.Interfaces.ILogger.LogLevel>()
+            var level = await AnsiConsole.PromptAsync(new SelectionPrompt<ILogger.LogLevel>()
                 .Title("Logger level for the service responsible for connecting to:")
                 .AddChoices(
                 [
-                    FusionAPI.Interfaces.ILogger.LogLevel.Trace,
-                    FusionAPI.Interfaces.ILogger.LogLevel.Info,
-                    FusionAPI.Interfaces.ILogger.LogLevel.Warning,
-                    FusionAPI.Interfaces.ILogger.LogLevel.Error
+                    ILogger.LogLevel.Trace,
+                    ILogger.LogLevel.Info,
+                    ILogger.LogLevel.Warning,
+                    ILogger.LogLevel.Error
                 ])
                 );
-            Logger?.Information("Selected log level: " + level.ToString());
+            Logger?.Information("Selected log level: {0}", level.ToString());
 
             var choice = await AnsiConsole.PromptAsync(new SelectionPrompt<string>()
                 .Title("Select how to connect to the Steam API:")
@@ -265,11 +267,11 @@ namespace FLB_API
 #pragma warning restore S3878
 #pragma warning restore IDE0079
 #pragma warning restore RCS1222
-            Logger?.Information("Selected service: " + choice);
-            return new(level, choice);
+            Logger?.Information("Selected service: {0}", choice);
+            return new Tuple<ILogger.LogLevel, string>(level, choice);
         }
 
-        private static async Task SavePreferences(FusionAPI.Interfaces.ILogger.LogLevel level, string choice)
+        private static async Task SavePreferences(ILogger.LogLevel level, string choice)
         {
             if (Settings == null)
                 return;
@@ -295,14 +297,14 @@ namespace FLB_API
             LoadSettings();
             while (!token.IsCancellationRequested)
             {
-                if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
+                if (SteamClient is { Handler.IsInitialized: true })
                 {
                     try
                     {
                         List<LobbyInfo> friendsOnly = [];
-                        if (SteamClient != null && SteamClient.Handler?.IsInitialized == true)
+                        if (SteamClient.Handler?.IsInitialized == true)
                         {
-                            SteamLobbies = new(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
                             friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
                         }
                         else
@@ -310,19 +312,14 @@ namespace FLB_API
                             Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
                         }
 
-                        if (EOSClient != null && EOSClient.Handler?.IsInitialized == true)
-                        {
-                            EOSLobbies = new(await EOSClient.FetchLobbies("EOS") ?? [], EOSClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            //friendsOnly.AddRange((await EOSClient.FetchLobbies("EOS", true)).ToList() ?? []);
-                        }
+                        if (EpicClient is { Handler.IsInitialized: true })
+                            EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [], EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
                         else
-                        {
                             Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
-                        }
 
-                        FriendsOnlyLobbies = new([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
-                        Lobbies = new((SteamLobbies?.Lobbies ?? []).Concat(EOSLobbies?.Lobbies ?? []).ToArray() ?? [], EOSClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
-                        Logger?.Information($"Combined all available lobbies ({Lobbies.Lobbies.Length})");
+                        FriendsOnlyLobbies = new LobbyListResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        Lobbies = new LobbyListResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
                         if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
                         {
                             await DiscordBotManager.Status();
@@ -331,7 +328,7 @@ namespace FLB_API
                         {
                             if (Settings?.Preferences?.LaunchDiscordBot == true)
                             {
-                                Program.Logger?.Information("Setting up discord bot");
+                                Logger?.Information("Setting up discord bot");
                                 _ = DiscordBotManager.Setup();
                             }
                         }
@@ -380,7 +377,7 @@ namespace FLB_API
             if (AuthCancel != null)
                 await AuthCancel.CancelAsync();
 
-            if (IMAPEmpty())
+            if (ImapEmpty())
             {
                 SteamLogger?.Warning("Empty IMAP Configuration, falling back to manual input...");
                 AuthCancel = new CancellationTokenSource();
@@ -393,12 +390,12 @@ namespace FLB_API
                     SteamLogger?.Info("Using IMAP to fetch Steam Auth Code...");
                     await Task.Delay((int)3.5f * 1000);
                     ImapManager ??= new IMAPManager(
-                        Settings!.IMAP!.Host!,
-                        Settings.IMAP.Port,
+                        Settings!.Imap!.Host!,
+                        Settings.Imap.Port,
                         SteamLogger
                         );
 
-                    ImapManager.LogIn(Settings!.IMAP!.Username!, Settings!.IMAP!.Password!);
+                    ImapManager.LogIn(Settings!.Imap!.Username!, Settings!.Imap!.Password!);
                     var code = await ImapManager.GetCodeAsync();
                     if (string.IsNullOrWhiteSpace(code))
                     {
@@ -419,10 +416,10 @@ namespace FLB_API
             }
         }
 
-        private static bool IMAPEmpty()
-            => string.IsNullOrWhiteSpace(Settings?.IMAP?.Host) ||
-               string.IsNullOrWhiteSpace(Settings?.IMAP?.Username) ||
-               string.IsNullOrWhiteSpace(Settings?.IMAP?.Password);
+        private static bool ImapEmpty()
+            => string.IsNullOrWhiteSpace(Settings?.Imap?.Host) ||
+               string.IsNullOrWhiteSpace(Settings?.Imap?.Username) ||
+               string.IsNullOrWhiteSpace(Settings?.Imap?.Password);
 
         private static void LoadSettings()
         {

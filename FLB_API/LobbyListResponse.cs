@@ -11,7 +11,7 @@ namespace FLB_API
     public class LobbyListResponse
     {
         [JsonIgnore]
-        public string JSON { get; set; }
+        public string Json { get; set; }
 
         [JsonPropertyName("lobbies")]
         public CustomLobbyInfo[] Lobbies { get; set; }
@@ -32,7 +32,7 @@ namespace FLB_API
             Date = ((DateTimeOffset)date).ToUnixTimeSeconds();
             Interval = interval;
             Friends = friends ?? [];
-            JSON = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
+            Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
     }
 }

@@ -17,11 +17,13 @@ namespace FusionAPI
 
         public SteamUser? SteamUser { get; }
 
-        private IReadOnlyList<SteamFriends.FriendsListCallback.Friend>? FriendsList;
+        private IReadOnlyList<SteamFriends.FriendsListCallback.Friend>? FriendsList { get; set; }
 
-        private readonly SteamMatchmaking? Matchmaking;
+        private SteamMatchmaking? Matchmaking { get; }
 
-        private string? Username, Password;
+        private string? Username { get; set; }
+
+        private string? Password { get; set; }
 
         public bool IsLoggedOn { get; private set; }
 
@@ -31,15 +33,13 @@ namespace FusionAPI
 
         public IAuthenticator? Authenticator { get; set; }
 
-        private ILogger? Logger;
+        private ILogger? Logger { get; set; }
 
         private string? previouslyStoredGuardData;
 
         private long ReconnectTime { get; set; } = -1;
 
-        private DateTime _lastFetch = DateTime.Now;
-
-        public DateTime LastFetch => _lastFetch;
+        public DateTime LastFetch { get; private set; } = DateTime.Now;
 
         public string ID => "Steam";
 
@@ -56,15 +56,17 @@ namespace FusionAPI
             CallbackManager.Subscribe<SteamUser.LoggedOffCallback>(LoggedOffCallback);
             CallbackManager.Subscribe<SteamFriends.FriendsListCallback>(FriendsListCallback);
 
-            Task.Run(async () =>
+            Task.Run(CallbackLoop);
+        }
+
+        private async Task? CallbackLoop()
+        {
+            while (true)
             {
-                while (true)
-                {
-                    // in order for the callbacks to get routed, they need to be handled by the manager
-                    CallbackManager.RunCallbacks();
-                    await Task.Delay(50);
-                }
-            });
+                // in order for the callbacks to get routed, they need to be handled by the manager
+                CallbackManager?.RunCallbacks();
+                await Task.Delay(50);
+            }
         }
 
         private void FriendsListCallback(SteamFriends.FriendsListCallback callback)
@@ -183,14 +185,14 @@ namespace FusionAPI
             List<Filter> filters = [
                     new DistanceFilter(ELobbyDistanceFilter.Worldwide),
                     new SlotsAvailableFilter(int.MaxValue),
-                    new StringFilter(LobbyKeys.HasLobbyOpenKey, ELobbyComparison.Equal, bool.TrueString),
-                    new StringFilter(LobbyKeys.IdentifierKey, ELobbyComparison.Equal, bool.TrueString),
-                    new StringFilter(LobbyKeys.GameKey, ELobbyComparison.Equal, "BONELAB"),
+                    new StringFilter(LobbyKeys.HAS_LOBBY_OPEN_KEY, ELobbyComparison.Equal, bool.TrueString),
+                    new StringFilter(LobbyKeys.IDENTIFIER_KEY, ELobbyComparison.Equal, bool.TrueString),
+                    new StringFilter(LobbyKeys.GAME_KEY, ELobbyComparison.Equal, "BONELAB"),
                 ];
-            if(publicLobbies)
-                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.Equal, (int)ServerPrivacy.PUBLIC));
-            if(friendsOnlyLobbies)
-                filters.Add(new NumericalFilter(LobbyKeys.PrivacyKey, ELobbyComparison.Equal, (int)ServerPrivacy.FRIENDS_ONLY));
+            if (publicLobbies)
+                filters.Add(new NumericalFilter(LobbyKeys.PRIVACY_KEY, ELobbyComparison.Equal, (int)ServerPrivacy.PUBLIC));
+            if (friendsOnlyLobbies)
+                filters.Add(new NumericalFilter(LobbyKeys.PRIVACY_KEY, ELobbyComparison.Equal, (int)ServerPrivacy.FRIENDS_ONLY));
 
             if (Matchmaking == null)
                 return [];
@@ -200,13 +202,11 @@ namespace FusionAPI
             if (task != null)
                 lobbies = await task.ToTask();
 
-            if (lobbies != null && lobbies.Result == EResult.OK)
-            {
-                _lastFetch = DateTime.Now;
-                IMatchmakingLobby[] processed = [.. ProcessLobbies(lobbies.Lobbies)];
-                return processed;
-            }
-            return [];
+            if (lobbies is not { Result: EResult.OK })
+                return [];
+            LastFetch = DateTime.Now;
+            IMatchmakingLobby[] processed = [.. ProcessLobbies(lobbies.Lobbies)];
+            return processed;
         }
 
         private List<IMatchmakingLobby> ProcessLobbies(List<Lobby> lobbies)
@@ -217,11 +217,11 @@ namespace FusionAPI
         }
 
         public bool IsFriend(string id)
-            => ulong.TryParse(id, out ulong res) && FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == res) == true;
+            => ulong.TryParse(id, out var res) && FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == res) == true;
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
-            if (!metadata.TryGetValue("username", out string? value1) || !metadata.TryGetValue("password", out string? value))
+            if (!metadata.TryGetValue("username", out var value1) || !metadata.TryGetValue("password", out string? value))
                 throw new AuthenticationException("SteamKitHandler requires 'username' and 'password' in metadata to initialize!");
 
             Logger = logger;
@@ -255,16 +255,14 @@ namespace FusionAPI
 
             public string GetData(string key)
             {
-                if (lobby.Metadata.ContainsKey(key))
-                    return lobby.Metadata[key];
-                return string.Empty;
+                return lobby.Metadata.TryGetValue(key, out var data) ? data : string.Empty;
             }
 
             public bool TryGetData(string key, out string value)
             {
-                if (lobby.Metadata.ContainsKey(key))
+                if (lobby.Metadata.TryGetValue(key, out var data))
                 {
-                    value = lobby.Metadata[key];
+                    value = data;
                     return !string.IsNullOrEmpty(value);
                 }
                 value = string.Empty;

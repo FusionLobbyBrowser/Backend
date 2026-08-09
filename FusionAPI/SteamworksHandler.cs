@@ -10,18 +10,16 @@ namespace FusionAPI
     {
         public bool IsInitialized => SteamClient.IsValid;
 
-        private ILogger? Logger;
+        private ILogger? Logger { get; set; }
 
-        private DateTime _lastFetch = DateTime.Now;
-
-        public DateTime LastFetch => _lastFetch;
+        public DateTime LastFetch { get; private set; } = DateTime.Now;
 
         public string ID => "Steam";
 
         public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             var lobbies = ConvertLobbies(await GetSteamLobbies(publicLobbies, friendsOnlyLobbies));
-            _lastFetch = DateTime.Now;
+            LastFetch = DateTime.Now;
             return [.. lobbies];
         }
 
@@ -42,13 +40,13 @@ namespace FusionAPI
             list.WithMaxResults(int.MaxValue);
             list.WithSlotsAvailable(int.MaxValue);
 
-            list.WithKeyValue(LobbyKeys.IdentifierKey, bool.TrueString);
-            list.WithKeyValue(LobbyKeys.HasLobbyOpenKey, bool.TrueString);
-            list.WithKeyValue(LobbyKeys.GameKey, "BONELAB");
-            if(publicLobbies)
-                list.WithEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.PUBLIC);
-            if(friendsOnlyLobbies)
-                list.WithEqual(LobbyKeys.PrivacyKey, (int)ServerPrivacy.FRIENDS_ONLY);
+            list.WithKeyValue(LobbyKeys.IDENTIFIER_KEY, bool.TrueString);
+            list.WithKeyValue(LobbyKeys.HAS_LOBBY_OPEN_KEY, bool.TrueString);
+            list.WithKeyValue(LobbyKeys.GAME_KEY, "BONELAB");
+            if (publicLobbies)
+                list.WithEqual(LobbyKeys.PRIVACY_KEY, (int)ServerPrivacy.PUBLIC);
+            if (friendsOnlyLobbies)
+                list.WithEqual(LobbyKeys.PRIVACY_KEY, (int)ServerPrivacy.FRIENDS_ONLY);
 
             return await list.RequestAsync();
         }
@@ -62,9 +60,7 @@ namespace FusionAPI
             Dispatch.OnException += SteamworksError;
 #pragma warning restore S2696, IDE0079
             SteamClient.Init(Fusion.AppID);
-            if (!SteamClient.IsValid)
-                throw new InvalidOperationException("Steamworks failed to initialize!");
-            return Task.CompletedTask;
+            return !SteamClient.IsValid ? throw new InvalidOperationException("Steamworks failed to initialize!") : Task.CompletedTask;
         }
 
         private void SteamworksDebug(CallbackType type, string msg, bool server)
@@ -74,11 +70,12 @@ namespace FusionAPI
             => Logger?.Error("Steamworks Exception: {0}", ex);
 
         public bool IsFriend(string id)
-            => ulong.TryParse(id, out ulong res) && SteamFriends.GetFriends().Any(f => f.Id == res);
+            => ulong.TryParse(id, out var res) && SteamFriends.GetFriends().Any(f => f.Id == res);
     }
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby
     {
+        private Lobby lobby = lobby;
         public string Owner => lobby.Owner.Id.ToString();
 
         public bool IsOwnerMe => lobby.Owner.IsMe;

@@ -9,10 +9,10 @@ namespace FLB_API
         public int Interval { get; set; }
 
         [JsonPropertyName("modio_token")]
-        public string? ModIO_Token { get; set; }
+        public string? ModIoToken { get; set; }
 
         [JsonPropertyName("steam_token")]
-        public string? SteamWebAPI_Token { get; set; }
+        public string? SteamWebApiToken { get; set; }
 
         [JsonPropertyName("discord_bot_token")]
         public string? DiscordBotToken { get; set; }
@@ -30,7 +30,7 @@ namespace FLB_API
         public Auth? Authentication { get; set; } = new();
 
         [JsonPropertyName("imap")]
-        public ImapAuth? IMAP { get; set; } = new();
+        public ImapAuth? Imap { get; set; } = new();
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -69,19 +69,16 @@ namespace FLB_API
         public bool LaunchDiscordBot { get; set; }
 
         [JsonPropertyName("logLevel")]
-        public string LogLevel_String { get; set; } = "INFO";
+        public string LogLevelString { get; set; } = "INFO";
 
         [JsonIgnore]
         public FusionAPI.Interfaces.ILogger.LogLevel LogLevel
         {
-            get
-            {
-                return Enum.Parse<FusionAPI.Interfaces.ILogger.LogLevel>(LogLevel_String);
-            }
+            get => Enum.Parse<FusionAPI.Interfaces.ILogger.LogLevel>(LogLevelString);
             set
             {
                 var @enum = Enum.GetName(value);
-                LogLevel_String = @enum ?? "INFO";
+                LogLevelString = @enum ?? "INFO";
             }
         }
 

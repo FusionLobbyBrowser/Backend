@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 
-namespace FusionAPI.Epic;
+namespace FusionAPI.EOS;
 
-internal sealed class EOSThreadDispatcher : IDisposable
+internal sealed class ThreadDispatcher : IDisposable
 {
     private readonly ConcurrentQueue<Action> _queue = new();
     private readonly CancellationTokenSource _cts = new();
@@ -12,7 +12,7 @@ internal sealed class EOSThreadDispatcher : IDisposable
 
     internal SynchronizationContext Context => _context;
 
-    internal EOSThreadDispatcher()
+    internal ThreadDispatcher()
     {
         _context = new EOSSynchronizationContext(this);
 
@@ -24,11 +24,11 @@ internal sealed class EOSThreadDispatcher : IDisposable
         _thread.Start();
     }
 
-    internal bool IsOnEOSThread => Thread.CurrentThread == _thread;
+    internal bool IsOnThread => Thread.CurrentThread == _thread;
 
-    internal Task RunOnEOSThreadAsync(Action action)
+    internal Task RunOnThreadAsync(Action action)
     {
-        if (IsOnEOSThread)
+        if (IsOnThread)
         {
             action();
             return Task.CompletedTask;
@@ -50,16 +50,36 @@ internal sealed class EOSThreadDispatcher : IDisposable
         return tcs.Task;
     }
 
-    internal Task<T> RunOnEOSThreadAsync<T>(Func<T> func)
+    internal Task<T> RunOnThreadAsync<T>(Func<T> func)
     {
-        if (IsOnEOSThread)
+        if (IsOnThread)
             return Task.FromResult(func());
 
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         _queue.Enqueue(() =>
         {
-            try   { tcs.SetResult(func()); }
+            try { tcs.SetResult(func()); }
             catch (Exception ex) { tcs.SetException(ex); }
+        });
+        return tcs.Task;
+    }
+
+    internal Task<T> RunOnThreadAsync<T>(Func<Task<T>> func)
+    {
+        if (IsOnThread)
+            return func();
+
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _queue.Enqueue(() =>
+        {
+            var task = func();
+            task.ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    tcs.SetException(t.Exception);
+                else
+                    tcs.SetResult(t.Result);
+            });
         });
         return tcs.Task;
     }
@@ -75,7 +95,7 @@ internal sealed class EOSThreadDispatcher : IDisposable
             while (_queue.TryDequeue(out var action))
             {
                 try { action(); }
-                catch {  }
+                catch { }
             }
 
             Thread.Sleep(1);
@@ -93,9 +113,9 @@ internal sealed class EOSThreadDispatcher : IDisposable
 
 internal sealed class EOSSynchronizationContext : SynchronizationContext
 {
-    private readonly EOSThreadDispatcher _dispatcher;
+    private readonly ThreadDispatcher _dispatcher;
 
-    internal EOSSynchronizationContext(EOSThreadDispatcher dispatcher)
+    internal EOSSynchronizationContext(ThreadDispatcher dispatcher)
         => _dispatcher = dispatcher;
 
     public override void Post(SendOrPostCallback d, object? state)
@@ -103,7 +123,7 @@ internal sealed class EOSSynchronizationContext : SynchronizationContext
 
     public override void Send(SendOrPostCallback d, object? state)
     {
-        if (_dispatcher.IsOnEOSThread)
+        if (_dispatcher.IsOnThread)
         {
             d(state);
             return;
@@ -113,7 +133,7 @@ internal sealed class EOSSynchronizationContext : SynchronizationContext
         Exception? ex = null;
         _dispatcher.Post(() =>
         {
-            try   { d(state); }
+            try { d(state); }
             catch (Exception e) { ex = e; }
             finally { mre.Set(); }
         });

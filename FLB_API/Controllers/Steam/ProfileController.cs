@@ -22,17 +22,17 @@ namespace FLB_API.Controllers.Steam
         [HttpGet(Name = "GetSteamProfile")]
         public async Task<IActionResult> Get([FromRoute(Name = "steamId")] string steamId)
         {
-            if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebAPI_Token))
+            if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
                 return Program.CreateResult("Backend is not set up for using Steam API!", 500);
 
-            if (!ulong.TryParse(steamId, out ulong id))
+            if (!ulong.TryParse(steamId, out var id))
                 return Program.CreateResult("Invalid Steam ID! ", 400);
 
             var profile = await GetProfile(id);
             if (profile?.Profile == null)
                 return Program.CreateResult("Steam API returned no profile for such ID!", 400);
 
-            return Ok(profile.ProfileJSON);
+            return Ok(profile.ProfileJson);
         }
 
         public static async Task<ProfileCache?> GetProfile(ulong id)
@@ -46,7 +46,7 @@ namespace FLB_API.Controllers.Steam
                     return cache;
             }
 
-            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebAPI_Token);
+            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebApiToken);
             var user = factory.CreateSteamWebInterface<SteamUser>(HttpClient);
 
             var summaries = await user.GetPlayerSummariesAsync([id]);
@@ -62,28 +62,28 @@ namespace FLB_API.Controllers.Steam
 
     public class ProfileCache
     {
-        public string? ProfileJSON { get; private set; }
+        public string? ProfileJson { get; private set; }
 
-        public JSONPlayerSummaryModel? Profile
+        public JsonPlayerSummaryModel? Profile
         {
             get;
             set
             {
                 field = value;
-                ProfileJSON = System.Text.Json.JsonSerializer.Serialize(value, JsonSerializerOptions.Web);
+                ProfileJson = JsonSerializer.Serialize(value, JsonSerializerOptions.Web);
             }
         }
 
         public ProfileCache(PlayerSummaryModel profile)
         {
-            Profile = new(profile);
+            Profile = new JsonPlayerSummaryModel(profile);
             Start = DateTimeOffset.Now;
         }
 
         public DateTimeOffset Start { get; }
     }
 
-    public class JSONPlayerSummaryModel(PlayerSummaryModel summary)
+    public class JsonPlayerSummaryModel(PlayerSummaryModel summary)
     {
         public string SteamId { get; set; } = summary.SteamId.ToString();
 

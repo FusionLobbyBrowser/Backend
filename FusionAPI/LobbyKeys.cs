@@ -11,46 +11,46 @@ namespace FusionAPI
         /// <summary>
         /// The key to identify that this is a Fusion lobby.
         /// </summary>
-        public const string IdentifierKey = "MarrowFusion";
+        public const string IDENTIFIER_KEY = "MarrowFusion";
 
         /// <summary>
         /// The key to identify that the lobby is open and joinable.
         /// </summary>
-        public const string HasLobbyOpenKey = "HasLobbyOpen";
+        public const string HAS_LOBBY_OPEN_KEY = "HasLobbyOpen";
 
         /// <summary>
         /// The key to identify the array containing all keys for the lobby.
         /// </summary>
-        public const string KeyCollectionKey = "KeyCollection";
+        public const string KEY_COLLECTION_KEY = "KeyCollection";
 
         /// <summary>
         /// The key for a lobby's code. The value should always be uppercase to allow for case insensitivity.
         /// </summary>
-        public const string LobbyCodeKey = "LobbyCode";
+        public const string LOBBY_CODE_KEY = "LobbyCode";
 
         /// <summary>
         /// The key for a lobby's privacy.
         /// </summary>
-        public const string PrivacyKey = "Privacy";
+        public const string PRIVACY_KEY = "Privacy";
 
         /// <summary>
         /// The key to get if a lobby is full.
         /// </summary>
-        public const string FullKey = "Full";
+        public const string FULL_KEY = "Full";
 
         /// <summary>
         /// The key for a lobby's major version.
         /// </summary>
-        public const string VersionMajorKey = "VersionMajor";
+        public const string VERSION_MAJOR_KEY = "VersionMajor";
 
         /// <summary>
         /// The key for a lobby's minor version.
         /// </summary>
-        public const string VersionMinorKey = "VersionMinor";
+        public const string VERSION_MINOR_KEY = "VersionMinor";
 
         /// <summary>
         /// The key for a lobby's game.
         /// </summary>
-        public const string GameKey = "Game";
+        public const string GAME_KEY = "Game";
     }
 }

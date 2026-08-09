@@ -11,6 +11,8 @@ namespace FLB_API.Controllers
     [Route("[controller]")]
     public class LobbyListController : ControllerBase
     {
+        private const string ContentType = "application/json";
+
         [HttpGet(Name = "GetPublicLobbies")]
         [Authorize]
         [AllowAnonymous]
@@ -28,7 +30,7 @@ namespace FLB_API.Controllers
 
             if (platformType != Platform.All)
             {
-                var handler = platformType == Platform.Steam ? Program.SteamClient : Program.EOSClient;
+                var handler = platformType == Platform.Steam ? Program.SteamClient : Program.EpicClient;
                 if (handler?.Handler.IsInitialized != true)
                     return Program.CreateResult($"Server is not connected to {Enum.GetName(platformType)}.", 500);
             }
@@ -36,52 +38,54 @@ namespace FLB_API.Controllers
             {
                 if (Program.SteamClient?.Handler.IsInitialized != true)
                     return Program.CreateResult("Server is not connected to Steam.", 500);
-                else if (Program.EOSClient?.Handler.IsInitialized != true)
+                if (Program.EpicClient?.Handler.IsInitialized != true)
                     return Program.CreateResult("Server is not connected to Epic.", 500);
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
-            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString() ?? "-1");
+            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
 
-            LobbyListResponse? list;
-            if (platformType == Platform.Steam)
-                list = Program.SteamLobbies;
-            else if (platformType == Platform.Epic)
-                list = Program.EOSLobbies;
-            else
-                list = Program.Lobbies;
+            var list = platformType switch
+            {
+                Platform.Steam => Program.SteamLobbies,
+                Platform.Epic => Program.EpicLobbies,
+                _ => Program.Lobbies
+            };
 
-            if (string.IsNullOrWhiteSpace(list?.JSON))
+            if (string.IsNullOrWhiteSpace(list?.Json))
                 return Program.CreateResult("Did not fetch lobbies yet", 500);
 
-            if (friendsOnly)
+            if (!friendsOnly)
+                return Program.CreateResult(list.Json, contentType: ContentType);
+
+            var self = User.GetSteamId();
+            if (self == -1 || string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.Json))
+                return Program.CreateResult(list.Json, contentType: ContentType);
+
+            List<LobbyInfo> copy = [.. (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];
+
+            string[] friends = [];
+            try
             {
-                var self = User.GetSteamID();
-                if (self != -1 && !string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.JSON))
-                {
-                    List<LobbyInfo> copy = [.. (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];
-
-                    string[] friends = [];
-                    try
-                    {
-                        friends = await FriendsController.GetFriendIDs((ulong)self);
-                    }
-                    catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                    {
-                        Program.Logger?.Error(ex, "User has friends list private! Cannot fetch friends only lobbies");
-                    }
-
-                    if (friends?.Length > 0)
-                    {
-                        copy = [.. copy.Where(l => friends.Any(x => x == l.LobbyID))];
-                        copy.AddRange(list.Lobbies);
-
-                        list = new LobbyListResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval, friends);
-                    }
-                }
+                friends = await FriendsController.GetFriendIDs((ulong)self);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Program.Logger?.Error(ex, "User has friends list private! Cannot fetch friends only lobbies");
             }
 
-            return Program.CreateResult(list.JSON, contentType: "application/json");
+            if (!(friends?.Length > 0))
+                return Program.CreateResult(list.Json, contentType: ContentType);
+
+            copy =
+            [
+                .. copy.Where(l => friends.Any(x => x == l.LobbyID)),
+                .. list.Lobbies
+            ];
+
+            list = new LobbyListResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date).DateTime, list.Interval, friends);
+
+            return Program.CreateResult(list.Json, contentType: ContentType);
         }
 
         public enum Platform

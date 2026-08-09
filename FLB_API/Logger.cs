@@ -5,34 +5,22 @@ using LogLevel = FusionAPI.Interfaces.ILogger.LogLevel;
 
 namespace FLB_API
 {
-    public class Logger : ILogger
+    public class Logger(LogLevel level, string prefix) : ILogger
     {
-        public LogLevel Level { get; set; }
+        public LogLevel Level { get; set; } = level;
 
-        public string Prefix { get; set; }
+        public string Prefix { get; set; } = prefix;
 
-        public Logger()
+        public Logger() : this(LogLevel.Info, string.Empty)
         {
-            this.Level = LogLevel.Info;
-            this.Prefix = string.Empty;
         }
 
-        public Logger(LogLevel level)
+        public Logger(LogLevel level) : this(level, string.Empty)
         {
-            this.Level = level;
-            this.Prefix = string.Empty;
         }
 
-        public Logger(string prefix)
+        public Logger(string prefix) : this(LogLevel.Info, prefix)
         {
-            this.Prefix = prefix;
-            this.Level = LogLevel.Info;
-        }
-
-        public Logger(LogLevel level, string prefix)
-        {
-            this.Level = level;
-            this.Prefix = prefix;
         }
 
         public void Error(string message, params object[] args)
@@ -40,8 +28,7 @@ namespace FLB_API
             if (Level > LogLevel.Error)
                 return;
 
-            var msg = string.Format(message, args);
-            Program.Logger?.Error(FormatPrefix() + msg);
+            Program.Logger?.Error(Format(message, args));
         }
 
         public void Info(string message, params object[] args)
@@ -49,8 +36,7 @@ namespace FLB_API
             if (Level > LogLevel.Info)
                 return;
 
-            var msg = string.Format(message, args);
-            Program.Logger?.Information(FormatPrefix() + msg);
+            Program.Logger?.Information(Format(message, args));
         }
 
         public void Debug(string message, params object[] args)
@@ -58,8 +44,7 @@ namespace FLB_API
             if (Level > LogLevel.Debug)
                 return;
 
-            var msg = string.Format(message, args);
-            Program.Logger?.Debug(FormatPrefix() + msg);
+            Program.Logger?.Debug(Format(message, args));
         }
 
         public void Trace(string message, params object[] args)
@@ -67,8 +52,7 @@ namespace FLB_API
             if (Level > LogLevel.Trace)
                 return;
 
-            var msg = string.Format(message, args);
-            Program.Logger?.Verbose(FormatPrefix() + msg);
+            Program.Logger?.Verbose(Format(message, args));
         }
 
         public void Warning(string message, params object[] args)
@@ -76,8 +60,13 @@ namespace FLB_API
             if (Level > LogLevel.Warning)
                 return;
 
+            Program.Logger?.Warning(Format(message, args));
+        }
+
+        private string Format(string message, params object[] args)
+        {
             var msg = string.Format(message, args);
-            Program.Logger?.Warning(FormatPrefix() + msg);
+            return FormatPrefix() + msg;
         }
 
         private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $"[[{Prefix}]] " : string.Empty)}";

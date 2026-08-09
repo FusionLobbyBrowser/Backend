@@ -11,15 +11,15 @@ namespace FLB_API.Managers
 {
     public static partial class ModIOManager
     {
-        private const int GAME_ID = 3809;
+        private const int GameId = 3809;
 
-        private const int COLLECTION_ID = 92630;
+        private const int CollectionId = 92630;
 
-        internal readonly static List<MemoryThumbnail> Thumbnails = new(1000);
+        internal static readonly List<MemoryThumbnail> THUMBNAILS = new(1000);
 
         public static bool IsSetup { get; private set; } = false;
 
-        private static readonly Lock _lock = new();
+        private static readonly Lock Lock = new();
 
         private static readonly HttpClient HttpClient = new();
 
@@ -29,7 +29,7 @@ namespace FLB_API.Managers
 
         public static async Task Setup()
         {
-            lock (_lock)
+            lock (Lock)
             {
                 if (IsSetup) return;
                 IsSetup = true;
@@ -47,17 +47,17 @@ namespace FLB_API.Managers
             {
                 await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
                 int count;
-                lock (_lock) count = Thumbnails.Count;
-                Program.Logger?.Information($"Starting cleanup process! Processing {count} thumbnails...");
+                lock (Lock) count = THUMBNAILS.Count;
+                Program.Logger?.Information("Starting cleanup process! Processing {0} thumbnails...", count);
                 List<MemoryThumbnail> toRemove;
-                lock (_lock)
+                lock (Lock)
                 {
-                    toRemove = [.. Thumbnails.Where(x => !x.IsThumbnailValid())];
+                    toRemove = [.. THUMBNAILS.Where(x => !x.IsThumbnailValid())];
                     foreach (var r in toRemove)
-                        Thumbnails.Remove(r);
+                        THUMBNAILS.Remove(r);
                 }
 
-                Program.Logger?.Information($"Removed {toRemove.Count} thumbnails!");
+                Program.Logger?.Information("Removed {0} thumbnails!", toRemove.Count);
 
                 GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
 #pragma warning disable S1215
@@ -77,57 +77,54 @@ namespace FLB_API.Managers
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
-            Program.Logger?.Information($"Remotely fetching mod thumbnail for {modId}");
+            Program.Logger?.Information("Remotely fetching mod thumbnail for {0}", modId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIO_Token) || Program.Settings.ModIO_Token == "your-token")
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) || Program.Settings.ModIoToken == "your-token")
             {
                 Program.Logger?.Warning("Mod.io token is not set. Cannot fetch remote mod thumbnail.");
                 return null;
             }
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GAME_ID}.modapi.io/v1/games/{GAME_ID}/mods/{modId}");
-            request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIO_Token}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/mods/{modId}");
+            request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
             request.Headers.Add("Accept", "application/json");
             using var response = await HttpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
-            bool maturity = json.GetProperty("maturity_option").GetInt16() == 8;
+            var maturity = json.GetProperty("maturity_option").GetInt16() == 8;
             string? thumbnail = null;
 
             if (json.TryGetProperty("logo", out var logoElement))
                 thumbnail = logoElement.GetProperty("thumb_320x180").GetString();
 
-            if (thumbnail is null)
-                return null;
-            else
-                return new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60))), maturity);
+            return thumbnail is null ? null : new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60)), maturity);
         }
 
         public static async Task FetchAvatarsFromCollection()
         {
-            Program.Logger?.Information($"Getting avatars from collection {COLLECTION_ID}");
+            Program.Logger?.Information("Getting avatars from collection {0}", CollectionId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIO_Token) || Program.Settings.ModIO_Token == "your-token")
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) || Program.Settings.ModIoToken == "your-token")
             {
                 Program.Logger?.Warning("Mod.io token is not set. Cannot fetch mods.");
                 return;
             }
 
-            int offset = 0;
-            int total = -1;
+            var offset = 0;
+            var total = -1;
             List<int> mods = [];
 
             do
             {
-                Program.Logger?.Information($"Fetching avatars... ({offset} offset out of {(total == -1 ? "unknown" : total.ToString())})");
-                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GAME_ID}.modapi.io/v1/games/{GAME_ID}/collections/{COLLECTION_ID}/mods?_offset={offset}");
-                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIO_Token}");
+                Program.Logger?.Information("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/collections/{CollectionId}/mods?_offset={offset}");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
                 request.Headers.Add("Accept", "application/json");
                 using var response = await HttpClient.SendAsync(request);
                 var body = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    Program.Logger?.Error($"Failed to fetch avatars from collection. Status code: {response.StatusCode} ({response.ReasonPhrase})\n{body}");
+                    Program.Logger?.Error("Failed to fetch avatars from collection. Status code: {0} ({1})\n{2}", response.StatusCode, response.ReasonPhrase, body);
                     return;
                 }
                 var json = JsonSerializer.Deserialize<JsonDocument>(body);
@@ -143,32 +140,32 @@ namespace FLB_API.Managers
             }
             while (total > offset);
             _furryMods = mods;
-            Program.Logger?.Information($"Updated list, now has {mods.Count} furry mods");
+            Program.Logger?.Information("Updated list, now has {0} furry mods", mods.Count);
         }
 
         public static CustomLobbyInfo Convert(this LobbyInfo info)
         {
-            bool hasFurries = info.PlayerList?.Players?.Any(p => FurryMods.Contains(p.AvatarModID)) ?? false;
+            var hasFurries = info.PlayerList?.Players?.Any(p => FurryMods.Contains(p.AvatarModID)) ?? false;
             return new CustomLobbyInfo(info, hasFurries);
         }
 
-        public static async Task<MemoryThumbnail?> GetModThumbnail(long modId, string barcode = "")
+        public static async Task<MemoryThumbnail?> GetModThumbnail(long modId, string? barcode = "")
         {
             try
             {
-                Program.Logger?.Information($"Getting mod thumbnail for {modId} ({barcode ?? "N/A"})");
+                Program.Logger?.Information("Getting mod thumbnail for {0} ({1})", modId, barcode ?? "N/A");
                 if (modId == -1)
                     return GetWithBarcode(barcode);
 
                 MemoryThumbnail? item;
-                lock (_lock)
-                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
+                lock (Lock)
+                    item = THUMBNAILS.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
                 {
                     if (item.IsThumbnailValid())
                     {
-                        Program.Logger?.Information($"Found cached mod thumbnail for {modId}");
-                        lock (_lock)
+                        Program.Logger?.Information("Found cached mod thumbnail for {0}", modId);
+                        lock (Lock)
                         {
                             if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
                                 item.Barcodes.Add(barcode);
@@ -178,48 +175,46 @@ namespace FLB_API.Managers
                     else
                     {
                         Program.Logger?.Information("Found an outdated thumbnail, removing...");
-                        lock (_lock)
-                            Thumbnails.Remove(item);
+                        lock (Lock)
+                            THUMBNAILS.Remove(item);
                     }
                 }
 
                 var remoteThumbnail = await GetRemoteModThumbnailUrl(modId);
-                if (remoteThumbnail is not null)
+                if (remoteThumbnail is null)
+                    return null;
+                var image = await GetImage(remoteThumbnail.ThumbnailUrl);
+                item = new MemoryThumbnail(remoteThumbnail.ModId, image, remoteThumbnail.ExpireTime, remoteThumbnail.IsNsfw);
+                lock (Lock)
                 {
-                    var image = await GetImage(remoteThumbnail.ThumbnailUrl);
-                    item = new MemoryThumbnail(remoteThumbnail.ModId, image, remoteThumbnail.ExpireTime, remoteThumbnail.IsNSFW);
-                    lock (_lock)
-                    {
-                        if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
-                            item.Barcodes.Add(barcode);
+                    if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
+                        item.Barcodes.Add(barcode);
 
-                        Thumbnails.Add(item);
-                    }
-                    return item;
+                    THUMBNAILS.Add(item);
                 }
-                return null;
+                return item;
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, $"Error getting mod thumbnail for {modId}");
+                Program.Logger?.Error(ex, "Error getting mod thumbnail for {0}", modId);
                 return null;
             }
         }
 
-        public static async Task<bool> IsNSFW(long modId, string barcode = "")
+        public static async Task<bool> IsNsfw(long modId, string barcode = "")
         {
             try
             {
                 if (modId == -1)
-                    return GetWithBarcode(barcode)?.IsNSFW ?? false;
+                    return GetWithBarcode(barcode)?.IsNsfw ?? false;
 
                 MemoryThumbnail? item;
-                lock (_lock)
-                    item = Thumbnails.FirstOrDefault(x => x.ModId == modId);
+                lock (Lock)
+                    item = THUMBNAILS.FirstOrDefault(x => x.ModId == modId);
                 if (item != null)
-                    return item.IsNSFW;
+                    return item.IsNsfw;
                 else
-                    return (await GetRemoteModThumbnailUrl(modId))?.IsNSFW ?? false;
+                    return (await GetRemoteModThumbnailUrl(modId))?.IsNsfw ?? false;
             }
             catch (Exception ex)
             {
@@ -238,23 +233,23 @@ namespace FLB_API.Managers
 
             if (!IsValidBarcode(barcode))
             {
-                Program.Logger?.Information("An invalid barcode was provided! Barcode: " + barcode);
+                Program.Logger?.Information("An invalid barcode was provided! Barcode: {0}", barcode);
                 return null;
             }
 
             Program.Logger?.Information("A barcode was only provided, trying to find an existing cache...");
-            MemoryThumbnail? _item;
-            lock (_lock)
-                _item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
-            // This ignores cache, as level without mod id is quite rare and theres a chance there will be another request to have a mod id associated
-            if (_item != null)
+            MemoryThumbnail? item;
+            lock (Lock)
+                item = THUMBNAILS.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
+            // This ignores cache, as level without mod id is quite rare and there's a chance there will be another request to have a mod id associated
+            if (item != null)
             {
-                Program.Logger?.Information($"Found cached mod thumbnail for {barcode}");
-                return _item;
+                Program.Logger?.Information("Found cached mod thumbnail for {0}", barcode);
+                return item;
             }
             else
             {
-                Program.Logger?.Information($"Could not find a cached thumbnail for {barcode}");
+                Program.Logger?.Information("Could not find a cached thumbnail for {0}", barcode);
                 return null;
             }
         }
@@ -311,22 +306,22 @@ namespace FLB_API.Managers
         private static partial Regex BarcodeValidationRegex();
     }
 
-    public class RemoteThumbnailResponse(long modId, string thumbnailUrl, DateTimeOffset? expire, bool isNSFW = false)
+    public class RemoteThumbnailResponse(long modId, string thumbnailUrl, DateTimeOffset? expire, bool isNsfw = false)
     {
         public long ModId { get; set; } = modId;
         public string ThumbnailUrl { get; set; } = thumbnailUrl;
 
-        public bool IsNSFW { get; set; } = isNSFW;
+        public bool IsNsfw { get; set; } = isNsfw;
 
         public DateTimeOffset? ExpireTime { get; set; } = expire;
     }
 
-    public sealed class MemoryThumbnail(long modId, byte[] image, DateTimeOffset? expire, bool isNSFW = false)
+    public sealed class MemoryThumbnail(long modId, byte[] image, DateTimeOffset? expire, bool isNsfw = false)
     {
         public long ModId { get; set; } = modId;
         public byte[] Image { get; set; } = image;
 
-        public bool IsNSFW { get; set; } = isNSFW;
+        public bool IsNsfw { get; set; } = isNsfw;
 
         // Sometimes the levels do not have a mod id associated, this will be used to counter that
         public List<string> Barcodes { get; set; } = [];

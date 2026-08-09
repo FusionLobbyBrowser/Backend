@@ -9,7 +9,7 @@ namespace FLB_API.Managers
 {
     public partial class IMAPManager(string host, int port, Logger? logger = null)
     {
-        public const string Subject = "Your Steam account: Access from";
+        public const string SUBJECT = "Your Steam account: Access from";
 
         public string Host { get; set; } = host;
         public int Port { get; set; } = port;
@@ -30,8 +30,8 @@ namespace FLB_API.Managers
 
         public async Task<string?> GetCodeAsync(float delay = 5, int maxTries = -1)
         {
-            int tries = 0;
-            while (Client?.IsAuthenticated == true && Client?.IsConnected == true && Client.Inbox != null)
+            var tries = 0;
+            while (Client is { IsAuthenticated: true, IsConnected: true })
             {
                 Logger?.Info("Checking inbox for email regarding the Steam Auth Code...");
                 await Client.Inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
@@ -40,7 +40,7 @@ namespace FLB_API.Managers
                     try
                     {
                         var message = await Client.Inbox.GetMessageAsync(msg);
-                        if (HandleMessage(message) is string code && !string.IsNullOrWhiteSpace(code))
+                        if (HandleMessage(message) is { } code && !string.IsNullOrWhiteSpace(code))
                             return code;
                     }
                     catch (Exception ex)
@@ -61,26 +61,21 @@ namespace FLB_API.Managers
 
         private string? HandleMessage(MimeMessage message)
         {
-            if (message?.Subject?.StartsWith(Subject, StringComparison.OrdinalIgnoreCase) == true)
-            {
-                Logger?.Info("Found an email containing the code! Extracting...");
-                return ExtractCode(message);
-            }
-            return null;
+            if (message?.Subject?.StartsWith(SUBJECT, StringComparison.OrdinalIgnoreCase) != true)
+                return null;
+            Logger?.Info("Found an email containing the code! Extracting...");
+            return ExtractCode(message);
         }
 
         private string? ExtractCode(MimeMessage message)
         {
-            if (message.BodyParts.FirstOrDefault(x => x.ContentType.MimeType == "text/plain") is TextPart body)
-            {
-                var code = SteamAuthCode().Match(body.Text)?.Groups?["code"];
-                if (code?.Success == true)
-                {
-                    Logger?.Info("Extracted the Steam Auth Code: {0}", code.Value);
-                    return code.Value;
-                }
-            }
-            return null;
+            if (message.BodyParts.FirstOrDefault(x => x.ContentType.MimeType == "text/plain") is not TextPart body)
+                return null;
+            var code = SteamAuthCode().Match(body.Text)?.Groups?["code"];
+            if (code?.Success != true)
+                return null;
+            Logger?.Info("Extracted the Steam Auth Code: {0}", code.Value);
+            return code.Value;
         }
 
         private void AddEvents()

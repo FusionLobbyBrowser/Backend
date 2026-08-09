@@ -20,7 +20,7 @@ namespace FLB_API.Discord.Commands
     [SlashCommand("lobbies", "Lobbies command")]
     public partial class LobbiesCommandModule : ApplicationCommandModule<ApplicationCommandContext>
     {
-        public static readonly Dictionary<string, LobbyListResponse> Response = [];
+        public static readonly Dictionary<string, LobbyListResponse> RESPONSE = [];
 
         [SubSlashCommand("check", "Check the currently available lobbies in LabFusion!")]
         public static InteractionMessageProperties Check(
@@ -29,12 +29,12 @@ namespace FLB_API.Discord.Commands
 
         internal static InteractionMessageProperties Internal_Check(Platform platform, int page = 1)
         {
-            var error = GetLobbies(out LobbyListResponse? list, platform);
+            var error = GetLobbies(out var list, platform);
             if (error != null)
                 return error;
 
             const int maxPerPage = 5;
-            int pages = (int)Math.Floor((double)list!.Lobbies.Length / maxPerPage);
+            var pages = (int)Math.Floor((double)list!.Lobbies.Length / maxPerPage);
 
             var lobbies = new List<LobbyInfo>(list.Lobbies).OrderByDescending(x => x.PlayerCount).ToArray();
             if (page > pages)
@@ -42,10 +42,12 @@ namespace FLB_API.Discord.Commands
 
             lobbies = GetPage(lobbies, page, maxPerPage);
 
-            string description =
-$@"# {GetEmoji(CustomEmoji.LabFusion)} Lobbies ({list.Lobbies.Length})
+            var description =
+                $"""
+                 # {GetEmoji(CustomEmoji.LabFusion)} Lobbies ({list.Lobbies.Length})
 
-Those are the currently available lobbies on LabFusion. Please note that the lobbies are fetched every {list.Interval} seconds, so it may not be that accurate.";
+                 Those are the currently available lobbies on LabFusion. Please note that the lobbies are fetched every {list.Interval} seconds, so it may not be that accurate.
+                 """;
             var container = new ComponentContainerProperties();
             container.AddComponents(new TextDisplayProperties(description));
             container.AddComponents(new ComponentSeparatorProperties());
@@ -61,18 +63,20 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
                 var section = new ComponentSectionProperties(
                     new ComponentSectionThumbnailProperties(
                         new ComponentMediaProperties(
-                            GetThumbnailURL(l.LevelModID, l.LevelBarcode))));
+                            GetThumbnailUrl(l.LevelModID, l.LevelBarcode))));
                 section.AddComponents(new TextDisplayProperties($"## {(l.LobbyPlatform == "Steam" ? GetEmoji(CustomEmoji.Steam) : GetEmoji(CustomEmoji.EpicGames))} {l.GetLobbyName()}"));
                 var details = new StringBuilder(
-@$"{(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
+                    $"""
+                     {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
 
-**{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
-**{GetEmoji(CustomEmoji.User)} Host:** {host}
-**{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
-**{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
-**{GetEmoji(CustomEmoji.Clock)} First discovered:** <t:{l.LobbyUptime}:R>
-**{GetEmoji(CustomEmoji.Users)} Players [{l.PlayerCount}/{l.MaxPlayers}]:**
-");
+                     **{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
+                     **{GetEmoji(CustomEmoji.User)} Host:** {host}
+                     **{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
+                     **{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
+                     **{GetEmoji(CustomEmoji.Clock)} First discovered:** <t:{l.LobbyUptime}:R>
+                     **{GetEmoji(CustomEmoji.Users)} Players [{l.PlayerCount}/{l.MaxPlayers}]:**
+
+                     """);
                 foreach (var p in l.PlayerList.Players)
                 {
                     var nickname = RemoveUnityRichText(p.Nickname);
@@ -108,7 +112,6 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
         [SubSlashCommand("info", "Get more details about a lobby!")]
         public class LobbiesInfoModule : ApplicationCommandModule<ApplicationCommandContext>
         {
-
             [SubSlashCommand("steam", "Get more details about a lobby! (Autocomplete with Steam lobbies)")]
             public static async Task<InteractionMessageProperties> SteamInfo(
             [SlashCommandParameter(Name = "id", Description = "Input an ID of a lobby or select from the available choices (only 25 lobbies with most players)",
@@ -130,7 +133,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
         internal static async Task<InteractionMessageProperties> Internal_Info(string id, int page = 1)
         {
-            var error = GetLobbies(out LobbyListResponse? list);
+            var error = GetLobbies(out var list);
             if (error != null)
                 return error;
 
@@ -139,7 +142,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
                 return DiscordBotManager.Error($"Could not find a lobby with the ID `{id}`");
 
             const int maxPerPage = 5;
-            int pages = (int)Math.Ceiling((double)l.PlayerList.Players.Length / maxPerPage);
+            var pages = (int)Math.Ceiling((double)l.PlayerList.Players.Length / maxPerPage);
 
             if (page > pages)
                 page = pages;
@@ -154,15 +157,17 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
             container.AddComponents(new TextDisplayProperties($"# {(l.LobbyPlatform == "Steam" ? GetEmoji(CustomEmoji.Steam) : GetEmoji(CustomEmoji.EpicGames))} {l.GetLobbyName()}"));
             var details =
-@$"{(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
-**{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
-**{GetEmoji(CustomEmoji.User)} Host:** {host}
-**{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
-**{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
-**{GetEmoji(CustomEmoji.Clock)} First discovered:** <t:{l.LobbyUptime}:R>
-";
+                $"""
+                 {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
+                 **{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
+                 **{GetEmoji(CustomEmoji.User)} Host:** {host}
+                 **{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
+                 **{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
+                 **{GetEmoji(CustomEmoji.Clock)} First discovered:** <t:{l.LobbyUptime}:R>
+
+                 """;
             container.AddComponents(new TextDisplayProperties(details));
-            container.AddComponents(new MediaGalleryProperties([new MediaGalleryItemProperties(GetThumbnailURL(l.LevelModID, l.LevelBarcode))]));
+            container.AddComponents(new MediaGalleryProperties([new MediaGalleryItemProperties(GetThumbnailUrl(l.LevelModID, l.LevelBarcode))]));
             container.AddComponents(new TextDisplayProperties($"# **{GetEmoji(CustomEmoji.Users)} Players [{l.PlayerCount}/{l.MaxPlayers}]:**"));
             container.AddComponents(new ComponentSeparatorProperties());
             foreach (var p in players)
@@ -181,7 +186,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             var row2 = new ActionRowProperties();
             row2.AddComponents(new LinkButtonProperties($"https://fusion.hahoos.dev/?lobby={l.LobbyID}", "View on Website", EmojiProperties.Custom(1522004581687623740)));
             row2.AddComponents(new ButtonProperties($"button_refreshInfo:{l.LobbyID}:{page}", "Refresh", ButtonStyle.Secondary));
-            row2.AddComponents(new ButtonProperties("button_removeMsg","Delete Message", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
+            row2.AddComponents(new ButtonProperties("button_removeMsg", "Delete Message", EmojiProperties.Custom((ulong)CustomEmoji.XMark), ButtonStyle.Danger));
 
             container.AddComponents(row);
             container.AddComponents(row2);
@@ -197,17 +202,17 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             var username = RemoveUnityRichText(p.Username);
             var d = RemoveUnityRichText(p.Description);
             var name = string.IsNullOrWhiteSpace(nickname) ? (username ?? "N/A") : nickname;
-            bool isAvatarWrong = await ModIOManager.IsNSFW(p.AvatarModID);
+            var isAvatarWrong = await ModIOManager.IsNsfw(p.AvatarModID);
             string avatar;
             if (!isAvatarWrong)
                 avatar = (p.AvatarModID != -1 ? $"[{RemoveUnityRichText(p.AvatarTitle ?? "N/A")}](https://mod.io/search/mods/{p.AvatarModID})" : $"{RemoveUnityRichText(p.AvatarTitle ?? "N/A")}");
             else
                 avatar = "[NSFW]";
-            var thumbnail = GetThumbnailURL(p.AvatarModID,
+            var thumbnail = GetThumbnailUrl(p.AvatarModID,
                     p.AvatarModID == -1 && ThumbnailController.Vanilla.ContainsKey(p.AvatarTitle ?? "N/A") ? p.AvatarTitle : string.Empty);
 
-            bool result = Uri.TryCreate(thumbnail, UriKind.Absolute, out Uri? uriResult)
-                && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+            var result = Uri.TryCreate(thumbnail, UriKind.Absolute, out Uri? uriResult)
+                         && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
 
             var section = new ComponentSectionProperties(
                 new ComponentSectionThumbnailProperties(
@@ -215,11 +220,13 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             if (result)
                 list.Add(section);
             var details =
-@$"## {name}
-{(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}{(string.IsNullOrWhiteSpace(nickname) ? string.Empty : $"\n**{GetEmoji(CustomEmoji.CircleUser)} Nickname:** {nickname}")}
-**{GetEmoji(CustomEmoji.IDBadge)} Username:** {username}
-**{GetEmoji(CustomEmoji.IDCard)} ID:** {p.PlatformID}
-**{GetEmoji(CustomEmoji.UserAvatar)} Avatar:** {avatar}{(l.LobbyPlatform == "Steam" ? $"\n**{GetEmoji(CustomEmoji.Steam)} Steam Profile:** [View](https://steamcommunity.com/profiles/{p.PlatformID})" : string.Empty)}";
+                $"""
+                 ## {name}
+                 {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}{(string.IsNullOrWhiteSpace(nickname) ? string.Empty : $"\n**{GetEmoji(CustomEmoji.CircleUser)} Nickname:** {nickname}")}
+                 **{GetEmoji(CustomEmoji.IDBadge)} Username:** {username}
+                 **{GetEmoji(CustomEmoji.IDCard)} ID:** {p.PlatformID}
+                 **{GetEmoji(CustomEmoji.UserAvatar)} Avatar:** {avatar}{(l.LobbyPlatform == "Steam" ? $"\n**{GetEmoji(CustomEmoji.Steam)} Steam Profile:** [View](https://steamcommunity.com/profiles/{p.PlatformID})" : string.Empty)}
+                 """;
             var detailsProp = new TextDisplayProperties(details);
             if (result)
                 section.AddComponents(detailsProp);
@@ -243,7 +250,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             lobbies = null;
             if (platform != Platform.All)
             {
-                var handler = platform == Platform.Steam ? Program.SteamClient : Program.EOSClient;
+                var handler = platform == Platform.Steam ? Program.SteamClient : Program.EpicClient;
                 if (handler?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error($"Server is not connected to {Enum.GetName(platform)}.");
             }
@@ -251,19 +258,18 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             {
                 if (Program.SteamClient?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error("Server is not connected to Steam.");
-                else if (Program.EOSClient?.Handler.IsInitialized != true)
+                else if (Program.EpicClient?.Handler.IsInitialized != true)
                     return DiscordBotManager.Error("Server is not connected to Epic.");
             }
 
-            LobbyListResponse? list;
-            if (platform == Platform.Steam)
-                list = Program.SteamLobbies;
-            else if (platform == Platform.Epic)
-                list = Program.EOSLobbies;
-            else
-                list = Program.Lobbies;
+            LobbyListResponse? list = platform switch
+            {
+                Platform.Steam => Program.SteamLobbies,
+                Platform.Epic => Program.EpicLobbies,
+                _ => Program.Lobbies
+            };
 
-            if (string.IsNullOrWhiteSpace(list?.JSON))
+            if (string.IsNullOrWhiteSpace(list?.Json))
                 return DiscordBotManager.Error("The server did not fetch lobbies yet");
 
             lobbies = list;
@@ -276,18 +282,12 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
         public static string RemoveUnityRichText(string? text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
-
-            return UnityRichText().Replace(text, string.Empty);
+            return string.IsNullOrWhiteSpace(text) ? string.Empty : UnityRichText().Replace(text, string.Empty);
         }
 
-        public static string GetThumbnailURL(long modId, string? barcode = "")
+        public static string GetThumbnailUrl(long modId, string? barcode = "")
         {
-            if (string.IsNullOrWhiteSpace(barcode))
-                return $"https://fusionapi.hahoos.dev/thumbnail/{modId}";
-            else
-                return $"https://fusionapi.hahoos.dev/thumbnail/{modId}?barcode={barcode}";
+            return string.IsNullOrWhiteSpace(barcode) ? $"https://fusionapi.hahoos.dev/thumbnail/{modId}" : $"https://fusionapi.hahoos.dev/thumbnail/{modId}?barcode={barcode}";
         }
 
         public static string GetEmoji(CustomEmoji emoji)
@@ -322,7 +322,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
 
     public class InfoAutoComplete : IAutocompleteProvider<AutocompleteInteractionContext>
     {
-        public virtual Platform Platform { get; private set; } = Platform.All;
+        public virtual Platform Platform { get; } = Platform.All;
 
         public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(ApplicationCommandInteractionDataOption option, AutocompleteInteractionContext context)
         {
@@ -330,7 +330,7 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             var list = new List<ApplicationCommandOptionChoiceProperties>();
 
             if (Program.Lobbies?.Lobbies == null)
-                return new([]);
+                return new ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?>([]);
 
             var lobbies = new List<LobbyInfo>(Program.Lobbies?.Lobbies!)?.OrderByDescending(x => x.PlayerCount).ToList() ?? [];
             if (Platform != Platform.All)
@@ -347,19 +347,19 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
                     var other = $" [{item.PlayerCount}/{item.MaxPlayers}] [Host: {TruncateAtWord(host, 20)}] [{item.LobbyPlatform}]";
                     var res = $"{TruncateAtWord(item.GetLobbyName(), maxChoiceLength, other.Length)}{other}";
                     if (res.Length <= maxChoiceLength)
-                        list.Add(new(res, item.LobbyID));
+                        list.Add(new ApplicationCommandOptionChoiceProperties(res, item.LobbyID));
                     else
-                        Program.Logger?.Warning($"Choice has more than {maxChoiceLength} allowed characters! ({res.Length})\nResult: {res}");
+                        Program.Logger?.Warning("Choice has more than {0} allowed characters! ({1})\nResult: {2}", maxChoiceLength, res.Length, res);
                 }
                 catch (Exception ex)
                 {
-                    Program.Logger?.Error(ex, $"An exception occurred while generating a choice for lobby {item.LobbyID}");
+                    Program.Logger?.Error(ex, "An exception occurred while generating a choice for lobby {0}", item.LobbyID);
                 }
             }
-            return new(list);
+            return new ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?>(list);
         }
 
-        public static string TruncateAtWord(string input, int maxLength, int additional = 0)
+        public static string TruncateAtWord(string? input, int maxLength, int additional = 0)
         {
             var length = maxLength - additional;
 
@@ -370,9 +370,9 @@ Those are the currently available lobbies on LabFusion. Please note that the lob
             if (input == null || input.Length < length)
                 return input ?? string.Empty;
 
-            int iNextSpace = input.LastIndexOf(' ', length);
+            var iNextSpace = input.LastIndexOf(' ', length);
 
-            return string.Format("{0}...", input[..((iNextSpace > 0) ? iNextSpace : length)].Trim());
+            return $"{input[..((iNextSpace > 0) ? iNextSpace : length)].Trim()}...";
         }
     }
 
