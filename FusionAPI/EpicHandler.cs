@@ -21,9 +21,9 @@ namespace FusionAPI
 
         public ILogger Logger { get; private set; }
 
-        private DateTime _lastFetch = DateTime.Now;
+        private DateTimeOffset _lastFetch = DateTimeOffset.UtcNow;
 
-        public DateTime LastFetch => _lastFetch;
+        public DateTimeOffset LastFetch => _lastFetch;
 
         private IntPtr EOSHandle { get; set; } = IntPtr.Zero;
 
@@ -88,13 +88,7 @@ namespace FusionAPI
                         continue;
 
                     var infoOptions = new LobbyDetailsCopyInfoOptions();
-                    if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue)
-                    {
-                        lobbyDetails.Release();
-                        continue;
-                    }
-
-                    if (lobbyInfo.Value.LobbyOwnerUserId == null)
+                    if (lobbyDetails.CopyInfo(ref infoOptions, out var lobbyInfo) != Result.Success || !lobbyInfo.HasValue || lobbyInfo.Value.LobbyOwnerUserId == null)
                     {
                         lobbyDetails.Release();
                         continue;
@@ -111,7 +105,7 @@ namespace FusionAPI
                     Logger.Error($"Failed to set result, current task state: {Enum.GetName(tcs.Task.Status)}");
             });
 
-            _lastFetch = DateTime.Now;
+            _lastFetch = DateTimeOffset.UtcNow;
 
             return await tcs.Task;
         }

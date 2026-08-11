@@ -6,7 +6,7 @@
 
         public bool IsInitialized { get; }
 
-        public DateTime LastFetch { get; }
+        public DateTimeOffset LastFetch { get; }
 
         public Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false);
 

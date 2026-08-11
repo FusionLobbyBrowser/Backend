@@ -12,14 +12,14 @@ namespace FusionAPI
 
         private ILogger? Logger { get; set; }
 
-        public DateTime LastFetch { get; private set; } = DateTime.Now;
+        public DateTimeOffset LastFetch { get; private set; } = DateTimeOffset.UtcNow;
 
         public string ID => "Steam";
 
         public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             var lobbies = ConvertLobbies(await GetSteamLobbies(publicLobbies, friendsOnlyLobbies));
-            LastFetch = DateTime.Now;
+            LastFetch = DateTimeOffset.UtcNow;
             return [.. lobbies];
         }
 
@@ -68,9 +68,6 @@ namespace FusionAPI
 
         private void SteamworksError(Exception ex)
             => Logger?.Error("Steamworks Exception: {0}", ex);
-
-        public bool IsFriend(string id)
-            => ulong.TryParse(id, out var res) && SteamFriends.GetFriends().Any(f => f.Id == res);
     }
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby

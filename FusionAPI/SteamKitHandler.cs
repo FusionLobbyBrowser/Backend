@@ -39,7 +39,7 @@ namespace FusionAPI
 
         private long ReconnectTime { get; set; } = -1;
 
-        public DateTime LastFetch { get; private set; } = DateTime.Now;
+        public DateTimeOffset LastFetch { get; private set; } = DateTimeOffset.UtcNow;
 
         public string ID => "Steam";
 
@@ -114,7 +114,7 @@ namespace FusionAPI
                 }
                 else
                 {
-                    ReconnectTime = DateTimeOffset.Now.AddMinutes(5).ToUnixTimeMilliseconds();
+                    ReconnectTime = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
                     Logger?.Error("Authentication failed: {0}", ex);
                 }
 
@@ -204,7 +204,7 @@ namespace FusionAPI
 
             if (lobbies is not { Result: EResult.OK })
                 return [];
-            LastFetch = DateTime.Now;
+            LastFetch = DateTimeOffset.UtcNow;
             IMatchmakingLobby[] processed = [.. ProcessLobbies(lobbies.Lobbies)];
             return processed;
         }
@@ -215,9 +215,6 @@ namespace FusionAPI
             lobbies.ForEach(lobby => list.Add(new SteamKitLobby(lobby, SteamClient)));
             return list;
         }
-
-        public bool IsFriend(string id)
-            => ulong.TryParse(id, out var res) && FriendsList?.Any(f => f.SteamID.ConvertToUInt64() == res) == true;
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {

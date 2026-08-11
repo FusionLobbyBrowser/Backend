@@ -26,10 +26,10 @@ namespace FLB_API
         public string[] Friends { get; set; }
 
         [JsonConstructor]
-        public LobbyListResponse(LobbyInfo[] lobbies, DateTime date, int interval = 30, string[]? friends = null)
+        public LobbyListResponse(LobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
         {
             Lobbies = [.. lobbies.Select(l => l.Convert())];
-            Date = ((DateTimeOffset)date).ToUnixTimeSeconds();
+            Date = date.ToUnixTimeSeconds();
             Interval = interval;
             Friends = friends ?? [];
             Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);

@@ -171,9 +171,19 @@ namespace FLB_API
             var app = builder.Build();
 
             app.UseHttpsRedirection();
+
+            List<string> origins = [
+                "https://fusion.hahoos.dev",
+                "https://hoodrp.com",
+                "https://www.hoodrp.com"
+            ];
+
+            if (app.Environment.IsDevelopment())
+                origins.Add("http://localhost:5500");
+
             app.UseCors((policyBuilder) =>
                 policyBuilder
-                    .WithOrigins("https://fusion.hahoos.dev", "https://hoodrp.com", "https://www.hoodrp.com")
+                    .WithOrigins([.. origins])
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials()
