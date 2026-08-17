@@ -1,8 +1,10 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 using FLB_API.Discord;
 using FLB_API.Managers;
+using FLB_API.Statistics;
 
 using FusionAPI;
 using FusionAPI.Data.Containers;
@@ -46,6 +48,8 @@ namespace FLB_API
         internal static IMAPManager? ImapManager { get; private set; }
 
         internal static CancellationTokenSource? AuthCancel { get; private set; }
+
+        internal static StatisticsManager Statistics { get; private set; }
 
         internal static Settings DefaultSettings { get; } = new()
         {
@@ -198,6 +202,14 @@ namespace FLB_API
 
             app.MapControllers();
 
+            if (Settings?.StoreStatistics == true && !string.IsNullOrWhiteSpace(Settings?.ConnectionString))
+            {
+                Statistics = new StatisticsManager(new Logger("STATISTICS"));
+                await Statistics.Init(Settings.ConnectionString);
+                await Statistics.RegisterFromAssembly(Assembly.GetExecutingAssembly());
+                _ = Statistics.Migrate();
+            }
+
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
 
@@ -312,24 +324,43 @@ namespace FLB_API
                     try
                     {
                         List<LobbyInfo> friendsOnly = [];
-                        if (SteamClient.Handler?.IsInitialized == true)
+                        var steamTask = Task.Run(async () =>
                         {
-                            SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
-                        }
-                        else
-                        {
-                            Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
-                        }
+                            if (SteamClient.Handler?.IsInitialized == true)
+                            {
+                                SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [],
+                                    SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                                friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
+                            }
+                            else
+                            {
+                                Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
+                            }
+                        }, token);
 
-                        if (EpicClient is { Handler.IsInitialized: true })
-                            EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [], EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                        else
-                            Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        var epicTask = Task.Run(async () =>
+                        {
+                            if (EpicClient is { Handler.IsInitialized: true })
+                                EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [],
+                                    EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            else
+                                Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        }, token);
+
+                        await Task.WhenAll(steamTask, epicTask);
 
                         FriendsOnlyLobbies = new LobbyListResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Lobbies = new LobbyListResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
+                        if (Settings?.StoreStatistics == true &&
+                            !string.IsNullOrWhiteSpace(Settings?.ConnectionString) && Statistics != null)
+                        {
+                            _ = Statistics.Analyze(Lobbies, false);
+                            if (Statistics.IsMigrating)
+                                Statistics.AdditionalToMigrate.Add(Lobbies);
+                        }
+
                         if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
                         {
                             await DiscordBotManager.Status();

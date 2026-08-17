@@ -23,6 +23,12 @@ namespace FLB_API
         [JsonPropertyName("thumbnail_cleanup_interval")]
         public int? ThumbnailCleanupInterval { get; set; } = 60 * 60;
 
+        [JsonPropertyName("store_statistics")]
+        public bool StoreStatistics { get; set; } = false;
+
+        [JsonPropertyName("statistics_connection_string")]
+        public string ConnectionString { get; set; } = string.Empty;
+
         [JsonPropertyName("preferences")]
         public Preferences? Preferences { get; set; } = new();
 
