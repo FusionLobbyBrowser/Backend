@@ -71,6 +71,7 @@ namespace FLB_API.Controllers
         [Produces("image/png")]
         public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modIdString, [FromQuery(Name = "barcode")] string barcode = "")
         {
+            barcode = barcode.Replace(Environment.NewLine, string.Empty);
             if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))
                 return Program.CreateResult("modId is required.", 400);
 

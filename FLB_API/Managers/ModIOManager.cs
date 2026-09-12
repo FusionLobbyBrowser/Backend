@@ -110,9 +110,9 @@ namespace FLB_API.Managers
         {
             Program.Logger?.Information("Getting avatars from collection {0}", CollectionId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) || Program.Settings.ModIoToken == "your-token")
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoPersonalAccessToken) || Program.Settings.ModIoPersonalAccessToken == "your-token")
             {
-                Program.Logger?.Warning("Mod.io token is not set. Cannot fetch mods.");
+                Program.Logger?.Warning("Mod.io personal access token is not set. Cannot fetch mods.");
                 return;
             }
 
@@ -124,7 +124,7 @@ namespace FLB_API.Managers
             {
                 Program.Logger?.Information("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/collections/{CollectionId}/mods?_offset={offset}");
-                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoPersonalAccessToken}");
                 request.Headers.Add("Accept", "application/json");
                 using var response = await HttpClient.SendAsync(request);
                 var body = await response.Content.ReadAsStringAsync();

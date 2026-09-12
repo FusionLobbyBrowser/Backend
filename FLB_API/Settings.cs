@@ -11,6 +11,9 @@ namespace FLB_API
         [JsonPropertyName("modio_token")]
         public string? ModIoToken { get; set; }
 
+        [JsonPropertyName("modio_pat")]
+        public string? ModIoPersonalAccessToken { get; set; }
+
         [JsonPropertyName("steam_token")]
         public string? SteamWebApiToken { get; set; }
 

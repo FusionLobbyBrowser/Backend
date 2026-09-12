@@ -312,23 +312,34 @@ namespace FLB_API
                     try
                     {
                         List<LobbyInfo> friendsOnly = [];
-                        if (SteamClient.Handler?.IsInitialized == true)
+                        var steamTask = Task.Run(async () =>
                         {
-                            SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [], SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
-                        }
-                        else
-                        {
-                            Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
-                        }
+                            if (SteamClient.Handler?.IsInitialized == true)
+                            {
+                                SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [],
+                                    SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                                friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
+                            }
+                            else
+                            {
+                                Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
+                            }
+                        }, token);
 
-                        if (EpicClient is { Handler.IsInitialized: true })
-                            EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [], EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                        else
-                            Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        var epicTask = Task.Run(async () =>
+                        {
+                            if (EpicClient is { Handler.IsInitialized: true })
+                                EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [],
+                                    EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            else
+                                Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                        }, token);
+
+                        await Task.WhenAll(steamTask, epicTask);
 
                         FriendsOnlyLobbies = new LobbyListResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Lobbies = new LobbyListResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
                         if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
                         {
