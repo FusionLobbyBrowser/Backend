@@ -8,4 +8,9 @@ updates:
   - package-ecosystem: "nuget" # See documentation for possible values
     directory: "/" # Location of package manifests
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    assignees:
+      - "HAHOOS"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
