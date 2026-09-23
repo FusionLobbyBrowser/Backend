@@ -109,8 +109,8 @@ jobs:
             sarif rewrite $sarifFile --output $sarifFile --sarif-output-version Current --log ForceOverwrite
             node convert.js $sarifFile $sarifFile
             mv $sarifFile $outputDir/$((i++)).sarif
-            sarif merge $outputDir/*.sarif --recurse true --output-directory=$outputDir --output-file=result.sarif
           done
+          sarif merge $outputDir/*.sarif --recurse true --output-directory=$outputDir --output-file=result.sarif
 
       - name: Upload sarif
         uses: github/codeql-action/upload-sarif@v4
