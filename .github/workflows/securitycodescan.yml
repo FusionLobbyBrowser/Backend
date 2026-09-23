@@ -21,12 +21,22 @@ jobs:
   SCS:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: nuget/setup-nuget@04b0c2b8d1b97922f67eca497d7cf0bf17b8ffe1
-      - uses: microsoft/setup-msbuild@v1.0.2
+      - name: "Checkout"
+        uses: actions/checkout@v7
+        
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+            dotnet-version: 3.1.0
+
+      - name: "Setup NuGet"
+        uses: nuget/setup-nuget@v4
+        
+      - name: "Setup MSBuild"
+        uses: microsoft/setup-msbuild@v3
 
       - name: Set up projects for analysis
-        uses: security-code-scan/security-code-scan-add-action@f8ff4f2763ed6f229eded80b1f9af82ae7f32a0d
+        uses: security-code-scan/security-code-scan-add-action@v1
 
       - name: Restore dependencies
         run: dotnet restore
