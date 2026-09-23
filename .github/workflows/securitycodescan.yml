@@ -23,11 +23,6 @@ jobs:
     steps:
       - name: "Checkout"
         uses: actions/checkout@v7
-        
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-            dotnet-version: 3.1.0
 
       - name: "Setup NuGet"
         uses: nuget/setup-nuget@v4
@@ -45,7 +40,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Convert sarif for uploading to GitHub
-        uses: security-code-scan/security-code-scan-results-action@cdb3d5e639054395e45bf401cba8688fcaf7a687
+        uses: security-code-scan/security-code-scan-results-action@v1
 
       - name: Upload sarif
         uses: github/codeql-action/upload-sarif@v3
