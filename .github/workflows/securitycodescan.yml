@@ -30,6 +30,10 @@ jobs:
       - name: "Setup MSBuild"
         uses: microsoft/setup-msbuild@v3
 
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '3.1.x'
+
       - name: Set up projects for analysis
         uses: security-code-scan/security-code-scan-add-action@v1
 
@@ -39,8 +43,69 @@ jobs:
       - name: Build
         run: dotnet build --no-restore
 
-      - name: Convert sarif for uploading to GitHub
-        uses: security-code-scan/security-code-scan-results-action@v1
+      - name: Convert sarif
+        shell: bash
+        run: |
+          dotnet tool install --global Sarif.Multitool --version 5.7.0
+          outputDir="../results"
+          mkdir $outputDir
+          
+          cat << EOF > convert.js
+            const fs = require('fs')
+
+            var args = process.argv.slice(2);
+            var sarif = JSON.parse(fs.readFileSync(args[0], "utf8"));
+
+            for (run of sarif.runs) {
+              run.tool.driver.name = "SecurityCodeScan";
+              run.tool.driver.fullName  = "Vulnerability Patterns Detector for C# and VB.NET";
+              run.tool.driver.informationUri  = "https://security-code-scan.github.io";
+
+              run.results = run.results.filter((e => e.ruleId.startsWith("SCS")));
+              run.tool.driver.rules = run.tool.driver.rules.filter((e => e.id.startsWith("SCS")));
+
+              for (let i = 0; i < run.results.length; ++i) {
+                run.results[i].ruleIndex = undefined;
+                run.results[i].relatedLocations = undefined;
+
+                if (run.results[i].locations === undefined) {
+                  const match = run.results[i].message.text.match(/(.*) in (.*)\((\d+)\)(:.*)/);
+                  run.results[i].message.text = match[1];
+                  run.results[i].locations = [{
+                    "physicalLocation" : {
+                      "artifactLocation" : {
+                        "uri" : "file:///" + match[2].replace(/\\\\/g, "/")
+                      },
+                      "region" : {
+                        "startLine": Number(match[3]),
+                        "startColumn": 1,
+                        "endLine": Number(match[3]),
+                        "endColumn": 1
+                      }
+                    }
+                  }];
+                }
+              }
+
+              for (rule of run.tool.driver.rules) {
+                rule.shortDescription = undefined;
+                rule.help = { "text" : rule.helpUri};
+              }
+
+              run.language = undefined;
+            }
+
+            var converted = JSON.stringify(sarif, null, 2);
+            fs.writeFileSync(args[1], converted);
+          EOF
+
+          i=0
+          for sarifFile in $(find ./ -name '*.sarif')
+          do
+            sarif rewrite $sarifFile --output $sarifFile --sarif-output-version Current --log ForceOverwrite
+            node convert.js $sarifFile $sarifFile
+            mv $sarifFile $outputDir/$((i++)).sarif
+          done
 
       - name: Upload sarif
         uses: github/codeql-action/upload-sarif@v3
