@@ -56,8 +56,12 @@ namespace FLB_API.Blacklist.Modules
                     MatchType.Contains => new Regex(Regex.Escape(word.Match ?? ""), options),
                     _ => new Regex(Regex.Escape(word.Match ?? ""), options),
                 };
-                if (regex.IsMatch(info.LobbyName ?? string.Empty))
+                if (regex.IsMatch(info.LobbyName ?? string.Empty)
+                    || regex.IsMatch(info.LobbyHostName ?? string.Empty)
+                    || regex.IsMatch(info.PlayerList?.Players?.FirstOrDefault(x => x.PlatformID == info.LobbyID)?.Nickname ?? string.Empty))
+                {
                     return false;
+                }
             }
 
             return true;
