@@ -34,5 +34,14 @@ namespace FLB_API
             Friends = friends ?? [];
             Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
+
+        public LobbyListResponse(CustomLobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
+        {
+            Lobbies = lobbies;
+            Date = date.ToUnixTimeSeconds();
+            Interval = interval;
+            Friends = friends ?? [];
+            Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
+        }
     }
 }
