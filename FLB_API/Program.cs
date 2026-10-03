@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using FLB_API.Blacklist;
 using FLB_API.Discord;
 using FLB_API.Managers;
 
@@ -42,6 +44,8 @@ namespace FLB_API
         internal static DateTime Uptime { get; private set; }
 
         internal static Settings? Settings { get; private set; }
+
+        internal static BlacklistManager Blacklist { get; private set; }
 
         internal static IMAPManager? ImapManager { get; private set; }
 
@@ -132,6 +136,8 @@ namespace FLB_API
                 Logger?.Information("Successfully initialized EOS API");
                 Handlers.Add(EpicClient.Handler);
                 Uptime = DateTime.UtcNow;
+                Blacklist = new BlacklistManager(new Logger(level, "BLACKLIST"));
+                await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
             }
             catch (Exception e)
             {
@@ -311,12 +317,12 @@ namespace FLB_API
                 {
                     try
                     {
-                        List<LobbyInfo> friendsOnly = [];
+                        List<CustomLobbyInfo> friendsOnly = [];
                         var steamTask = Task.Run(async () =>
                         {
                             if (SteamClient.Handler?.IsInitialized == true)
                             {
-                                SteamLobbies = new LobbyListResponse(await SteamClient.FetchLobbies("Steam") ?? [],
+                                SteamLobbies = await CreateResponse(await SteamClient.FetchLobbies("Steam") ?? [],
                                     SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
                                 friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
                             }
@@ -329,16 +335,20 @@ namespace FLB_API
                         var epicTask = Task.Run(async () =>
                         {
                             if (EpicClient is { Handler.IsInitialized: true })
-                                EpicLobbies = new LobbyListResponse(await EpicClient.FetchLobbies("EOS") ?? [],
+                            {
+                                EpicLobbies = await CreateResponse(await EpicClient.FetchLobbies("EOS") ?? [],
                                     EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
+                            }
                             else
+                            {
                                 Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
+                            }
                         }, token);
 
                         await Task.WhenAll(steamTask, epicTask);
 
-                        FriendsOnlyLobbies = new LobbyListResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
-                        Lobbies = new LobbyListResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        Lobbies = await CreateResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
 
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
                         if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
@@ -368,7 +378,27 @@ namespace FLB_API
             }
         }
 
-        private static async Task<LobbyInfo[]> FetchLobbies(this Fusion? client, string name, bool friendsOnly = false)
+        public static async Task<LobbyListResponse> CreateResponse(LobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
+        {
+            var converted = await lobbies.Select(x => x.Convert()).Where(async x => await Blacklist.IsAllowed(x));
+            return new LobbyListResponse([.. converted], date, interval, friends ?? []);
+        }
+
+        static async Task<IEnumerable<T>> Where<T>(
+            this IEnumerable<T> source, Func<T, Task<bool>> predicate)
+        {
+            var results = new ConcurrentQueue<T>();
+            var tasks = source.Select(
+                async x =>
+                {
+                    if (await predicate(x))
+                        results.Enqueue(x);
+                });
+            await Task.WhenAll(tasks);
+            return results;
+        }
+
+        private static async Task<CustomLobbyInfo[]> FetchLobbies(this Fusion? client, string name, bool friendsOnly = false)
         {
             if (client == null)
                 return [];
@@ -388,9 +418,10 @@ namespace FLB_API
                 return [];
             }
 
-            Logger?.Information($"Successfully fetched {name} lobbies ({lobbies.Length})... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
+            var filtered = await lobbies.Select(x => x.Convert()).Where(async x => await Blacklist.IsAllowed(x));
+            Logger?.Information($"Successfully fetched {name} lobbies ({filtered.Count()} -> {lobbies.Length - filtered.Count()} filtered out)... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
 
-            return lobbies;
+            return [.. filtered];
         }
 
         private static async Task<string> GetCodeFromEmail(string email, bool previousCodeWasIncorrect)

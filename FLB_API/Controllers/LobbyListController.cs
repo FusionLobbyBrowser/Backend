@@ -83,7 +83,7 @@ namespace FLB_API.Controllers
                 .. list.Lobbies
             ];
 
-            list = new LobbyListResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date), list.Interval, friends);
+            list = await Program.CreateResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date), list.Interval, friends);
 
             return Program.CreateResult(list.Json, contentType: ContentType);
         }

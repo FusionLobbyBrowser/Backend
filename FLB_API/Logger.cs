@@ -31,6 +31,14 @@ namespace FLB_API
             Program.Logger?.Error(Format(message, args));
         }
 
+        public void Error(string message, Exception ex, params object[] args)
+        {
+            if (Level > LogLevel.Error)
+                return;
+
+            Program.Logger?.Error(ex, Format(message, args));
+        }
+
         public void Info(string message, params object[] args)
         {
             if (Level > LogLevel.Info)
