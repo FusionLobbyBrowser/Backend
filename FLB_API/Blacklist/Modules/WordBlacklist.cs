@@ -45,6 +45,9 @@ namespace FLB_API.Blacklist.Modules
 
             foreach (var word in Config.Words)
             {
+                if (word == null || string.IsNullOrWhiteSpace(word.Match))
+                    continue;
+
                 const RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.Multiline;
                 Regex regex = word.Type switch
                 {
