@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace FLB_API.Blacklist.Modules
 {
-    public class WordBlacklist : IBlacklistModule
+    public partial class WordBlacklist : IBlacklistModule
     {
         public string Id => "WordBlacklist";
 
@@ -51,20 +51,28 @@ namespace FLB_API.Blacklist.Modules
                 const RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.Multiline;
                 Regex regex = word.Type switch
                 {
-                    MatchType.WholeWord => new Regex(@"\b" + Regex.Escape(word.Match ?? "") + @"\b", options),
+                    MatchType.WholeWord => new Regex(@"\b" + Regex.Escape(word.Match?.ToLower() ?? "") + @"\b", options),
                     MatchType.RegEx => new Regex(word.Match, options),
-                    MatchType.Contains => new Regex(Regex.Escape(word.Match ?? ""), options),
-                    _ => new Regex(Regex.Escape(word.Match ?? ""), options),
+                    MatchType.Contains => new Regex(Regex.Escape(word.Match?.ToLower() ?? ""), options),
+                    _ => new Regex(Regex.Escape(word.Match?.ToLower() ?? ""), options),
                 };
-                if (regex.IsMatch(info.LobbyName ?? string.Empty)
-                    || regex.IsMatch(info.LobbyHostName ?? string.Empty)
-                    || regex.IsMatch(info.PlayerList?.Players?.FirstOrDefault(x => x.PlatformID == info.LobbyID)?.Nickname ?? string.Empty))
+                if (regex.IsMatch(Clean(info.LobbyName?.ToLower() ?? string.Empty))
+                    || regex.IsMatch(Clean(info.LobbyHostName?.ToLower() ?? string.Empty))
+                    || regex.IsMatch(Clean(info.PlayerList?.Players?.FirstOrDefault(x => x.PlatformID == info.LobbyID)?.Nickname?.ToLower() ?? string.Empty)))
                 {
                     return false;
                 }
             }
 
             return true;
+        }
+
+        public static string Clean(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return text;
+
+            return CleanText().Replace(text, string.Empty);
         }
 
         private void LoadWords()
@@ -93,6 +101,9 @@ namespace FLB_API.Blacklist.Modules
                 Logger?.Error("Failed to set blacklisted words from file", ex);
             }
         }
+
+        [GeneratedRegex("<(.*?)>")]
+        private static partial Regex CleanText();
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
