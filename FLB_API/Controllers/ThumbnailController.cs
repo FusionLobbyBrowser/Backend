@@ -73,20 +73,20 @@ namespace FLB_API.Controllers
         [HttpGet(Name = "GetThumbnail")]
         [Tags("Thumbnail")]
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
-        [ProducesResponseType<FileStreamResult>(200, Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
-        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "The provided mod id is invalid or missing.")]
-        [ProducesResponseType<ErrorResponse>(500, "application/json", Description = "The server has encountered an error while fetching the thumbnail")]
-        [ProducesResponseType<ErrorResponse>(404, "application/json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        [ProducesResponseType<FileStreamResult>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
+        [ProducesResponseType<ProblemDetails>(400, "application/json", Description = "The provided mod id is invalid or missing.")]
+        [ProducesResponseType<ProblemDetails>(500, "application/json", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<ProblemDetails>(404, "application/json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modIdString,
             [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")][RegularExpression(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")] string barcode = "")
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
             if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))
-                return Program.CreateResult("modId is required.", 400);
+                return Problem("modId is required.", title: "Missing Mod ID", statusCode: 400);
 
             if (!long.TryParse(modIdString, out var modId) && string.IsNullOrWhiteSpace(barcode))
-                return Program.CreateResult("modId is not valid.", 400);
+                return Problem("modId is not valid.", title: "Invalid Mod ID", statusCode: 400);
 
             MemoryThumbnail? thumbnail;
             if (modId != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
@@ -95,12 +95,12 @@ namespace FLB_API.Controllers
                 {
                     thumbnail = await ModIOManager.GetModThumbnail(modId, barcode);
                     if (thumbnail == null)
-                        return Program.CreateResult("Thumbnail not found.", 404);
+                        return Problem("Thumbnail not found.", title: "Not Found", statusCode: 404);
                 }
                 catch (Exception ex)
                 {
                     Program.Logger?.Error(ex, "Error fetching thumbnail for {0}", modId);
-                    return Program.CreateResult("An error occurred while fetching the thumbnail", 500);
+                    return Problem("An error occurred while fetching the thumbnail", title: "Server Exception", statusCode: 500);
                 }
             }
             else
@@ -109,7 +109,7 @@ namespace FLB_API.Controllers
                 if (!System.IO.File.Exists(file))
                 {
                     Program.Logger?.Error("The directory/file for the vanilla thumbnail was not found! Barcode: {0} ... File Name: {1}.webp", barcode, fileName);
-                    return Program.CreateResult("Thumbnail not found. (Vanilla thumbnail missing)", 404);
+                    return Problem("Thumbnail not found. (Vanilla thumbnail missing)", title: "Invalid Barcode", statusCode: 404);
                 }
 
                 thumbnail = new MemoryThumbnail(-1, await System.IO.File.ReadAllBytesAsync(file), null);
@@ -124,7 +124,7 @@ namespace FLB_API.Controllers
                 return File(thumbnail.Image, "image/png", name);
 
             Program.Logger?.Error("The thumbnail for {0} was null.", modId);
-            return Program.CreateResult("An error occurred while fetching the thumbnail", 500);
+            return Problem("An error occurred while fetching the thumbnail", title: "Server Exception", statusCode: 500);
         }
     }
 }

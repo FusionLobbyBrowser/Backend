@@ -25,22 +25,22 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam profile of a specified user")]
         [ProducesResponseType<JsonPlayerSummaryModel>(200, "application/json", Description = "Returns the Steam profile of the specified user")]
-        [ProducesResponseType<ErrorResponse>(500, "application/json", Description = "Backend is not set up for using Steam API")]
-        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
+        [ProducesResponseType<ProblemDetails>(500, Description = "Backend is not set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(400, Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the profile of")][Required] string steamId)
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Program.CreateErrorResult("Backend is not set up for using Steam API!", 500);
+                return Problem("Backend is not set up for using Steam API!", title: "Not Set Up", statusCode: 500);
 
             if (!ulong.TryParse(steamId, out var id))
-                return Program.CreateErrorResult("Invalid Steam ID! ", 400);
+                return Problem("Invalid Steam ID was provided, must be a number!", title: "Invalid ID", statusCode: 400);
 
             var profile = await GetProfile(id);
-            if (profile?.Profile == null)
-                return Program.CreateErrorResult("Steam API returned no profile for such ID!", 400);
+            if (profile?.Profile == null || profile?.ProfileJson == null)
+                return Problem("Steam API returned no profile for such ID!", title: "No Profile", statusCode: 400);
 
-            return Ok(profile.ProfileJson);
+            return Program.CreateResult(profile.ProfileJson, contentType: "application/json");
         }
 
         public static async Task<ProfileCache?> GetProfile(ulong id)

@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
+using Epic.OnlineServices.Ecom;
+
 using FLB_API.Blacklist;
 using FLB_API.Discord;
 using FLB_API.Managers;
@@ -185,6 +187,15 @@ namespace FLB_API
                     Description = "An API for fetching LabFusion lobbies"
                 });
             });
+            builder.Services.AddProblemDetails(options =>
+            {
+                options.CustomizeProblemDetails = ctx =>
+                {
+                    ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
+                    ctx.ProblemDetails.Extensions["timestamp"] = DateTime.UtcNow;
+                    ctx.ProblemDetails.Instance = $"{ctx.HttpContext.Request.Method} {ctx.HttpContext.Request.Path}";
+                };
+            });
 
             var app = builder.Build();
 
@@ -216,6 +227,7 @@ namespace FLB_API
             app.MapControllers();
 
             app.UseSwaggerUI();
+            app.UseStatusCodePages();
 
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
@@ -521,16 +533,6 @@ namespace FLB_API
                 StatusCode = statusCode,
                 Content = message,
                 ContentType = contentType
-            };
-        }
-
-        internal static ContentResult CreateErrorResult(string message, int statusCode = 400)
-        {
-            return new ContentResult()
-            {
-                StatusCode = statusCode,
-                Content = JsonSerializer.Serialize(new ErrorResponse(statusCode, message), JsonSerializerOptions.Web),
-                ContentType = "application/json"
             };
         }
     }

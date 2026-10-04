@@ -32,14 +32,14 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam profile of the currently authenticated user")]
         [ProducesResponseType<JsonPlayerSummaryModel>(200, "application/json", Description = "Returns the Steam profile of the currently authenticated user")]
-        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "Steam API returned no profile for the authenticated user")]
+        [ProducesResponseType<ProblemDetails>(400, Description = "Steam API returned no profile for the authenticated user")]
         public async Task<IActionResult> GetMe()
         {
             var profile = await User.GetSteamProfile();
-            if (profile?.Profile == null)
-                return Program.CreateErrorResult("Steam API returned no profile for such ID!", 400);
+            if (profile?.Profile == null || profile?.ProfileJson == null)
+                return Problem("Steam API returned no profile for such ID!", title: "No Profile", statusCode: 400);
 
-            return Ok(profile.ProfileJson);
+            return Program.CreateResult(profile.ProfileJson, contentType: "application/json");
         }
     }
 
