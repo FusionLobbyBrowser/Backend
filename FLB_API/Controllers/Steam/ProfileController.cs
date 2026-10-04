@@ -25,20 +25,20 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam profile of a specified user")]
         [ProducesResponseType<JsonPlayerSummaryModel>(200, "application/json", Description = "Returns the Steam profile of the specified user")]
-        [ProducesResponseType<string>(500, "text/plain", Description = "Backend is not set up for using Steam API")]
-        [ProducesResponseType<string>(400, "text/plain", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
+        [ProducesResponseType<ErrorResponse>(500, "application/json", Description = "Backend is not set up for using Steam API")]
+        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the profile of")][Required] string steamId)
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Program.CreateResult("Backend is not set up for using Steam API!", 500);
+                return Program.CreateErrorResult("Backend is not set up for using Steam API!", 500);
 
             if (!ulong.TryParse(steamId, out var id))
-                return Program.CreateResult("Invalid Steam ID! ", 400);
+                return Program.CreateErrorResult("Invalid Steam ID! ", 400);
 
             var profile = await GetProfile(id);
             if (profile?.Profile == null)
-                return Program.CreateResult("Steam API returned no profile for such ID!", 400);
+                return Program.CreateErrorResult("Steam API returned no profile for such ID!", 400);
 
             return Ok(profile.ProfileJson);
         }

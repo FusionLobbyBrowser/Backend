@@ -21,8 +21,8 @@ namespace FLB_API.Controllers
         [AllowAnonymous]
         [EndpointSummary("Get LabFusion lobbies")]
         [ProducesResponseType<LobbyListResponse>(200, "application/json", Description = "Returns a list of lobbies with the requested filters taken into consideration")]
-        [ProducesResponseType<string>(400, "text/plain", Description = "The provided platform does not exist.")]
-        [ProducesResponseType<string>(500, "text/plain", Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
+        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "The provided platform does not exist.")]
+        [ProducesResponseType<ErrorResponse>(500, "application/json", Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
         public async Task<IActionResult> GetLobbies(
             [FromQuery(Name = "platform")][Description("The provider to fetch the lobbies from. Leave empty to combine from all")] string platform = "",
             [FromQuery(Name = "includeFriendsOnly")][Description("Should friends only lobbies be considered. This will only additionally include lobbies hosted by the authorized user's friends")] bool friendsOnly = true)
@@ -35,20 +35,20 @@ namespace FLB_API.Controllers
             else if (string.IsNullOrWhiteSpace(platform))
                 platformType = Platform.All;
             else
-                return Program.CreateResult("The provided platform does not exist. Leave empty to combine from all available platforms or choose from the following: Steam, Epic", 400);
+                return Program.CreateErrorResult("The provided platform does not exist. Leave empty to combine from all available platforms or choose from the following: Steam, Epic", 400);
 
             if (platformType != Platform.All)
             {
                 var handler = platformType == Platform.Steam ? Program.SteamClient : Program.EpicClient;
                 if (handler?.Handler.IsInitialized != true)
-                    return Program.CreateResult($"Server is not connected to {Enum.GetName(platformType)}.", 500);
+                    return Program.CreateErrorResult($"Server is not connected to {Enum.GetName(platformType)}.", 500);
             }
             else
             {
                 if (Program.SteamClient?.Handler.IsInitialized != true)
-                    return Program.CreateResult("Server is not connected to Steam.", 500);
+                    return Program.CreateErrorResult("Server is not connected to Steam.", 500);
                 if (Program.EpicClient?.Handler.IsInitialized != true)
-                    return Program.CreateResult("Server is not connected to Epic.", 500);
+                    return Program.CreateErrorResult("Server is not connected to Epic.", 500);
             }
 
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
@@ -62,7 +62,7 @@ namespace FLB_API.Controllers
             };
 
             if (string.IsNullOrWhiteSpace(list?.Json))
-                return Program.CreateResult("Did not fetch lobbies yet", 500);
+                return Program.CreateErrorResult("Did not fetch lobbies yet", 500);
 
             if (!friendsOnly)
                 return Program.CreateResult(list.Json, contentType: ContentType);

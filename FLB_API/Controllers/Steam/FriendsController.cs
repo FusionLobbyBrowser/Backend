@@ -24,17 +24,17 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam friends of the currently authenticated user")]
         [ProducesResponseType<List<JsonPlayerSummaryModel>>(200, "application/json", Description = "Returns the friends list of the specified user")]
-        [ProducesResponseType<string>(501, "text/plain", Description = "Attempted to check a friends list of a user you are not logged in as")]
-        [ProducesResponseType<string>(401, "text/plain", Description = "The user is not signed in or has their friends list private")]
-        [ProducesResponseType<string>(400, "text/plain", Description = "Steam API returned no friends for such ID")]
+        [ProducesResponseType<ErrorResponse>(501, "application/json", Description = "Attempted to check a friends list of a user you are not logged in as")]
+        [ProducesResponseType<ErrorResponse>(401, "application/json", Description = "The user is not signed in or has their friends list private")]
+        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "Steam API returned no friends for such ID")]
         public async Task<IActionResult> Get()
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Program.CreateResult("Backend is not set up for using Steam API!", 500);
+                return Program.CreateErrorResult("Backend is not set up for using Steam API!", 500);
 
             var id = User.GetSteamId();
             if (User.GetSteamId() == -1)
-                return Program.CreateResult("You must be signed in to check the Steam friends!", 401);
+                return Program.CreateErrorResult("You must be signed in to check the Steam friends!", 401);
 
             FriendsCache? friends;
             try
@@ -43,11 +43,11 @@ namespace FLB_API.Controllers.Steam
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                return Program.CreateResult("The user has the friends list private!", 401);
+                return Program.CreateErrorResult("The user has the friends list private!", 401);
             }
 
             if (friends?.Friends == null)
-                return Program.CreateResult("Steam API returned no friends for such ID!", 400);
+                return Program.CreateErrorResult("Steam API returned no friends for such ID!", 400);
 
             return Ok(friends.FriendsJson);
         }

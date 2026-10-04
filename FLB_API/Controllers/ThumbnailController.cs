@@ -73,10 +73,10 @@ namespace FLB_API.Controllers
         [HttpGet(Name = "GetThumbnail")]
         [Tags("Thumbnail")]
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
-        [ProducesResponseType<byte[]>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
-        [ProducesResponseType<string>(400, "text/plain", Description = "The provided mod id is invalid or missing.")]
-        [ProducesResponseType<string>(500, "text/plain", Description = "The server has encountered an error while fetching the thumbnail")]
-        [ProducesResponseType<string>(404, "text/plain", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        [ProducesResponseType<FileStreamResult>(200, Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
+        [ProducesResponseType<ErrorResponse>(400, "application/json", Description = "The provided mod id is invalid or missing.")]
+        [ProducesResponseType<ErrorResponse>(500, "application/json", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<ErrorResponse>(404, "application/json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modIdString,
             [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")][RegularExpression(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")] string barcode = "")

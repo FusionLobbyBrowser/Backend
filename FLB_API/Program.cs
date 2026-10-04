@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 using FLB_API.Blacklist;
@@ -522,5 +523,25 @@ namespace FLB_API
                 ContentType = contentType
             };
         }
+
+        internal static ContentResult CreateErrorResult(string message, int statusCode = 400)
+        {
+            return new ContentResult()
+            {
+                StatusCode = statusCode,
+                Content = JsonSerializer.Serialize(new ErrorResponse(statusCode, message), JsonSerializerOptions.Web),
+                ContentType = "application/json"
+            };
+        }
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    public class ErrorResponse(int code, string message)
+    {
+        [JsonPropertyName("code")]
+        public int Code { get; set; } = code;
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; } = message;
     }
 }
