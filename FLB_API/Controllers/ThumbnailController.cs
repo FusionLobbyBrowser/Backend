@@ -79,7 +79,7 @@ namespace FLB_API.Controllers
         [ProducesResponseType<ProblemDetails>(404, "application/json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modIdString,
-            [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")][RegularExpression(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")] string barcode = "")
+            [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")] string barcode = "")
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
             if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))
