@@ -54,7 +54,7 @@ namespace FLB_API.Blacklist.Modules
             if (RemoteList?.Bans == null || RemoteList.Bans.Count == 0)
                 return Task.FromResult(true);
 
-            return Task.FromResult(!Matches(RemoteList, info) && !Matches(LocalList, info));
+            return Task.FromResult(Matches(RemoteList, info) && Matches(LocalList, info));
         }
 
         private static bool Matches(GlobalBanList list, CustomLobbyInfo info)
