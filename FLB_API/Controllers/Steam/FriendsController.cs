@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.ComponentModel;
+using System.Text.Json;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,7 @@ using SteamWebAPI2.Utilities;
 namespace FLB_API.Controllers.Steam
 {
     [ApiController]
-    [Route("steam/friends/{steamId}")]
+    [Route("steam/friends")]
     public class FriendsController : ControllerBase
     {
         private const float CacheTime = 60 * 0.5f;
@@ -20,21 +21,25 @@ namespace FLB_API.Controllers.Steam
 
         [Authorize]
         [HttpGet(Name = "GetSteamFriends")]
-        public async Task<IActionResult> Get([FromRoute(Name = "steamId")] string steamId)
+        [Tags("Steam")]
+        [EndpointSummary("Get the Steam friends of the currently authenticated user")]
+        [ProducesResponseType<List<JsonPlayerSummaryModel>>(200, "application/json", Description = "Returns the friends list of the specified user")]
+        [ProducesResponseType<string>(501, "text/plain", Description = "Attempted to check a friends list of a user you are not logged in as")]
+        [ProducesResponseType<string>(401, "text/plain", Description = "The user is not signed in or has their friends list private")]
+        [ProducesResponseType<string>(400, "text/plain", Description = "Steam API returned no friends for such ID")]
+        public async Task<IActionResult> Get()
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
                 return Program.CreateResult("Backend is not set up for using Steam API!", 500);
 
-            if (!ulong.TryParse(steamId, out var id))
-                return Program.CreateResult("Invalid Steam ID! ", 400);
-
-            if ((long)id != User.GetSteamId())
-                return Program.CreateResult("You can only check the friends list of the user you are logged in as.", 401);
+            var id = User.GetSteamId();
+            if (User.GetSteamId() == -1)
+                return Program.CreateResult("You must be signed in to check the Steam friends!", 401);
 
             FriendsCache? friends;
             try
             {
-                friends = await GetFriends(id);
+                friends = await GetFriends((ulong)id);
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {

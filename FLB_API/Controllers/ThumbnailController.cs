@@ -1,11 +1,14 @@
-﻿using FLB_API.Managers;
+﻿using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+
+using FLB_API.Managers;
 
 using Microsoft.AspNetCore.Mvc;
 
 namespace FLB_API.Controllers
 {
     [ApiController]
-    [Route("[controller]/{modId}")]
+    [Route("thumbnail/{modId}")]
     public class ThumbnailController : ControllerBase
     {
         private static readonly Dictionary<string, string> _vanilla = new()
@@ -68,8 +71,15 @@ namespace FLB_API.Controllers
         public static IReadOnlyDictionary<string, string> Vanilla => _vanilla.AsReadOnly();
 
         [HttpGet(Name = "GetThumbnail")]
-        [Produces("image/png")]
-        public async Task<IActionResult> Get([FromRoute(Name = "modId")] string modIdString, [FromQuery(Name = "barcode")] string barcode = "")
+        [Tags("Thumbnail")]
+        [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
+        [ProducesResponseType<byte[]>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
+        [ProducesResponseType<string>(400, "text/plain", Description = "The provided mod id is invalid or missing.")]
+        [ProducesResponseType<string>(500, "text/plain", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<string>(404, "text/plain", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        public async Task<IActionResult> Get(
+            [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modIdString,
+            [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")][RegularExpression(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")] string barcode = "")
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
             if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))

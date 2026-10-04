@@ -30,6 +30,7 @@
 		<PackageReference Include="Serilog.Sinks.Spectre" Version="0.6.0" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
 		<PackageReference Include="Spectre.Console" Version="0.57.2" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
 	</ItemGroup>
 
 	<ItemGroup>

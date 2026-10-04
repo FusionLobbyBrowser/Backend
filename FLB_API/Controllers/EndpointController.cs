@@ -10,6 +10,9 @@ namespace FLB_API.Controllers
     public class EndpointController : ControllerBase
     {
         [HttpGet]
+        [Tags("General")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [Produces("text/plain")]
         public IActionResult Get()
         {
             Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");

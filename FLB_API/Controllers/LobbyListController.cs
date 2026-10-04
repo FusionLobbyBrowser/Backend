@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 using FLB_API.Controllers.Steam;
 
 using FusionAPI.Data.Containers;
@@ -8,15 +10,22 @@ using Microsoft.AspNetCore.Mvc;
 namespace FLB_API.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("/lobbylist")]
     public class LobbyListController : ControllerBase
     {
         private const string ContentType = "application/json";
 
-        [HttpGet(Name = "GetPublicLobbies")]
+        [HttpGet(Name = "GetLobbies")]
+        [Tags("Lobbies")]
         [Authorize]
         [AllowAnonymous]
-        public async Task<IActionResult> GetPublicLobbies([FromQuery(Name = "platform")] string platform = "", [FromQuery(Name = "includeFriendsOnly")] bool friendsOnly = true)
+        [EndpointSummary("Get LabFusion lobbies")]
+        [ProducesResponseType<LobbyListResponse>(200, "application/json", Description = "Returns a list of lobbies with the requested filters taken into consideration")]
+        [ProducesResponseType<string>(400, "text/plain", Description = "The provided platform does not exist.")]
+        [ProducesResponseType<string>(500, "text/plain", Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
+        public async Task<IActionResult> GetLobbies(
+            [FromQuery(Name = "platform")][Description("The provider to fetch the lobbies from. Leave empty to combine from all")] string platform = "",
+            [FromQuery(Name = "includeFriendsOnly")][Description("Should friends only lobbies be considered. This will only additionally include lobbies hosted by the authorized user's friends")] bool friendsOnly = true)
         {
             Platform platformType;
             if (platform.Equals("Steam", StringComparison.OrdinalIgnoreCase))

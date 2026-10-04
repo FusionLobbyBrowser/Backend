@@ -13,6 +13,7 @@ using FusionAPI.Interfaces;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.OpenApi;
 
 using Serilog;
 using Serilog.Sinks.Spectre;
@@ -172,7 +173,17 @@ namespace FLB_API
                 .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
 
             builder.Services.AddControllers();
-            builder.Services.AddOpenApi();
+            builder.Services.AddOpenApi(options => options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_0);
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "Fusion Lobby Browser API",
+                    Version = "v1",
+                    Description = "An API for fetching LabFusion lobbies"
+                });
+            });
 
             var app = builder.Build();
 
@@ -195,14 +206,15 @@ namespace FLB_API
                     .AllowCredentials()
             );
 
-            // Configure the HTTP request pipeline.
-            if (app.Environment.IsDevelopment())
-                app.MapOpenApi();
+            app.MapOpenApi();
 
             app.UseAuthentication();
             app.UseAuthorization();
 
+            app.UseSwagger();
             app.MapControllers();
+
+            app.UseSwaggerUI();
 
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
