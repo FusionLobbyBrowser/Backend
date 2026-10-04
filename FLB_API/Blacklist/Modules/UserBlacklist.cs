@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FLB_API.Blacklist.Modules
 {
@@ -6,7 +7,9 @@ namespace FLB_API.Blacklist.Modules
     {
         public string Id => "UserBlacklist";
 
-        public GlobalBanList List { get; private set; } = new();
+        public GlobalBanList RemoteList { get; private set; } = new();
+
+        public GlobalBanList LocalList { get; private set; } = new();
 
         private BlacklistManager? Instance { get; set; }
 
@@ -20,9 +23,12 @@ namespace FLB_API.Blacklist.Modules
 
         private HttpClient HttpClient { get; } = new();
 
+        private DateTimeOffset? LastFetch { get; set; } = null;
+
         public Task<bool> DeInitAsync()
         {
             Deinitialized = true;
+            LastFetch = null;
             return Task.FromResult(true);
         }
 
@@ -36,8 +42,8 @@ namespace FLB_API.Blacklist.Modules
             {
                 while (!Deinitialized)
                 {
-                    await FetchBans();
-                    await Task.Delay(15 * 60 * 1000);
+                    await LoadBans();
+                    await Task.Delay(30 * 1000);
                 }
             });
             return true;
@@ -45,12 +51,17 @@ namespace FLB_API.Blacklist.Modules
 
         public Task<bool> IsLobbyAllowed(CustomLobbyInfo info)
         {
-            if (List?.Bans == null || List.Bans.Count == 0)
+            if (RemoteList?.Bans == null || RemoteList.Bans.Count == 0)
                 return Task.FromResult(true);
 
-            return Task.FromResult(!List.Bans.Any(ban =>
+            return Task.FromResult(!Matches(RemoteList, info) && !Matches(LocalList, info));
+        }
+
+        private static bool Matches(GlobalBanList list, CustomLobbyInfo info)
+        {
+            return !list.Bans.Any(ban =>
                 ban.Games.Any(game => game.Game == "BONELAB")
-                && ban.Platforms.Any(platform => platform.Platform == info.LobbyPlatform && platform.PlatformID.ToString() == info.LobbyID)));
+                && ban.Platforms.Any(platform => platform.Platform == info.LobbyPlatform && platform.PlatformID.ToString() == info.LobbyID));
         }
 
         public async Task FetchBans()
@@ -67,15 +78,52 @@ namespace FLB_API.Blacklist.Modules
                 }
                 GlobalBanList? list = await res?.Content?.ReadFromJsonAsync<GlobalBanList>();
                 if (list != null)
-                    List = list;
+                    RemoteList = list;
                 else
                     Logger?.Error("Failed to fetch global bans: Deserialized list is null");
 
-                Logger?.Info($"Successfully fetched global bans! ({List.Bans.Count} bans)");
+                Logger?.Info($"Successfully fetched global bans! ({RemoteList.Bans.Count} bans)");
             }
             catch (Exception ex)
             {
                 Logger?.Error("Failed to fetch global bans", ex);
+            }
+        }
+
+        private async Task LoadBans()
+        {
+            try
+            {
+                if (LastFetch == null || (DateTimeOffset.Now - LastFetch.Value).TotalMinutes > 30)
+                {
+                    await FetchBans();
+                    LastFetch = DateTimeOffset.Now;
+                }
+
+                Logger?.Info("Loading blacklisted users...");
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blacklistedUsers.json");
+                if (!File.Exists(path))
+                {
+                    Logger?.Info("Blacklisted users file is missing, creating...");
+                    await using var stream = File.CreateText(path);
+                    var serialized = JsonSerializer.Serialize<GlobalBanList>(new());
+                    await stream.WriteAsync(serialized);
+                    await stream.FlushAsync();
+                    stream.Close();
+                }
+                else
+                {
+                    await using var file = File.OpenRead(path);
+                    if (file != null)
+                    {
+                        LocalList = await JsonSerializer.DeserializeAsync<GlobalBanList>(file) ?? new();
+                        Logger?.Info($"Successfully loaded blacklisted users! ({LocalList?.Bans?.Count ?? 0} users)");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error("Failed to set blacklisted words from file", ex);
             }
         }
     }
