@@ -24,7 +24,7 @@ jobs:
       deployment: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Create sixlabors.lic file
         run: echo "${{ secrets.SIXLABORS_LICENSE }}" > ./FLB_API/sixlabors.lic
       - name: Setup .NET
