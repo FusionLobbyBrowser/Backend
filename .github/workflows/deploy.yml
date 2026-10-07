@@ -28,7 +28,7 @@ jobs:
       - name: Create sixlabors.lic file
         run: echo "${{ secrets.SIXLABORS_LICENSE }}" > ./FLB_API/sixlabors.lic
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
             dotnet-version: 10.0.x
       - name: Publish Project
