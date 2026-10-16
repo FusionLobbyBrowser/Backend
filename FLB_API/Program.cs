@@ -208,7 +208,7 @@ namespace FLB_API
             ];
 
             if (app.Environment.IsDevelopment())
-                origins.Add("http://localhost:5500");
+                origins.AddRange(["http://localhost:3000"]);
 
             app.UseCors((policyBuilder) =>
                 policyBuilder

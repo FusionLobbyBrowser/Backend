@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -58,7 +59,7 @@ namespace FLB_API.Controllers.Steam
             var user = factory.CreateSteamWebInterface<SteamUser>(HttpClient);
 
             var summaries = await user.GetPlayerSummariesAsync([id]);
-            var profile = summaries.Data.FirstOrDefault();
+            var profile = summaries?.Data?.FirstOrDefault();
             if (profile == null)
                 return null;
 
