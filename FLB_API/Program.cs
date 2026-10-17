@@ -3,8 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
-using Epic.OnlineServices.Ecom;
-
 using FLB_API.Blacklist;
 using FLB_API.Discord;
 using FLB_API.Managers;
@@ -15,7 +13,6 @@ using FusionAPI.Interfaces;
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.OpenApi;
 
 using Serilog;
@@ -175,8 +172,11 @@ namespace FLB_API
                 })
                 .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
 
-            builder.Services.AddControllers();
-            builder.Services.AddOpenApi(options => options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_0);
+            builder.Services.AddControllers().AddJsonOptions(options => { options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()); }); ;
+            builder.Services.AddOpenApi(options =>
+            {
+                options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1;
+            });
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
