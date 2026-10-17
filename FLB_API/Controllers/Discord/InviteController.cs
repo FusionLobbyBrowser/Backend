@@ -11,6 +11,8 @@ namespace FLB_API.Controllers.Discord
     {
         internal static HttpClient HttpClient { get; } = new();
 
+        internal Dictionary<string, Tuple<string, DateTimeOffset>> Cache { get; } = [];
+
         [HttpGet(Name = "GetInviteInfo")]
         [Tags("Discord")]
         [EndpointSummary("Get info about a Discord invite")]
@@ -22,15 +24,26 @@ namespace FLB_API.Controllers.Discord
             inviteCode = Path.GetFileName(inviteCode);
 
             string invite;
-            try
+
+            if (Cache.TryGetValue(inviteCode, out var cached) && (DateTimeOffset.Now - cached.Item2).TotalSeconds < 60)
             {
-                var request = await HttpClient.GetAsync($"https://discord.com/api/invite/{inviteCode}?with_counts=true");
-                invite = await request.Content.ReadAsStringAsync();
+                invite = cached.Item1;
             }
-            catch (Exception ex)
+            else
             {
-                Program.Logger?.Error(ex, "Failed to retrieve the invite info for " + inviteCode);
-                return Problem("No info was found for the specified invite code.", title: "Invite Not Found", statusCode: 404);
+                try
+                {
+                    var request =
+                        await HttpClient.GetAsync($"https://discord.com/api/invite/{inviteCode}?with_counts=true");
+                    invite = await request.Content.ReadAsStringAsync();
+                    Cache[inviteCode] = new Tuple<string, DateTimeOffset>(invite, DateTimeOffset.Now);
+                }
+                catch (Exception ex)
+                {
+                    Program.Logger?.Error(ex, "Failed to retrieve the invite info for " + inviteCode);
+                    return Problem("No info was found for the specified invite code.", title: "Invite Not Found",
+                        statusCode: 404);
+                }
             }
 
             return Ok(invite);

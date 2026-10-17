@@ -72,7 +72,7 @@ namespace FLB_API.Controllers.Steam
                 return null;
 
             var cached = new FriendsCache([.. friends.Data]);
-            Cache.Add(id, cached);
+            Cache.TryAdd(id, cached);
             return cached;
         }
 
