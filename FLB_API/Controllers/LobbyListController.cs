@@ -32,7 +32,7 @@ namespace FLB_API.Controllers
             else return Program.CreateResult(list!.Json, contentType: ContentType);
         }
 
-        [HttpGet("/query/{search}", Name = "GetLobby")]
+        [HttpGet("query/{search}", Name = "GetLobby")]
         [Tags("Lobbies")]
         [Authorize]
         [AllowAnonymous]
