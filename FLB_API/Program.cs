@@ -78,7 +78,7 @@ namespace FLB_API
 
             Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
-                .WriteTo.Spectre(restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Information)
+                .WriteTo.Spectre()
                 .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
                 .CreateLogger();
 

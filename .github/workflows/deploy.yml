@@ -38,7 +38,7 @@ jobs:
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: "ignorethislmao"
-      - name: Adding Known Hosts
+      - name: Add Known Hosts
         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
       - name: Kill Backend
         uses: appleboy/ssh-action@v1
@@ -47,7 +47,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script: screen -XS FLB quit
+          script: screen -XS FLB_Backend quit
       - name: Deploy with rsync
         run: rsync -avz --exclude='settings.json' ./FLB_API/bin/Release/net10.0/linux-arm64/publish/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BACKEND_LOCATION }}
       - name: Start Backend
@@ -57,4 +57,4 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script: screen -dmS FLB bash -c '${{ secrets.SSH_BACKEND_LOCATION }}/FLB_API'
+          script: screen -dmS FLB_Backend bash -c '${{ secrets.SSH_BACKEND_LOCATION }}/FLB_API'

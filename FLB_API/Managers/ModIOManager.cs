@@ -308,7 +308,7 @@ namespace FLB_API.Managers
             }
         }
 
-        [GeneratedRegex(@"^[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?\.[a-zA-Z]{1,}?$")]
+        [GeneratedRegex(@"^[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?$")]
         private static partial Regex BarcodeValidationRegex();
     }
 
