@@ -40,7 +40,7 @@ namespace FLB_API.Controllers.Discord
                 }
                 catch (Exception ex)
                 {
-                    Program.Logger?.Error(ex, "Failed to retrieve the invite info for " + inviteCode);
+                    Program.Logger?.Error(ex, "Failed to retrieve the invite info for " + inviteCode.Replace(Environment.NewLine, ""));
                     return Problem("No info was found for the specified invite code.", title: "Invite Not Found",
                         statusCode: 404);
                 }

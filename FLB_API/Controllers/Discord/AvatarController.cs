@@ -35,7 +35,7 @@ namespace FLB_API.Controllers.Discord
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, "Failed to retrieve the icon for " + guildId + " guild.");
+                Program.Logger?.Error(ex, "Failed to retrieve the icon for " + guildId.Replace(Environment.NewLine, "") + " guild.");
                 return Problem("No icon was found for the specified guild and icon hash.", title: "Icon Not Found", statusCode: 404);
             }
 
