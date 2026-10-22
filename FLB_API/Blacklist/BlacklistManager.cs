@@ -5,9 +5,9 @@ using FLB_API;
 
 namespace FLB_API.Blacklist
 {
-    public class BlacklistManager(FusionAPI.Interfaces.ILogger logger)
+    public class BlacklistManager(FusionAPI.Data.Interfaces.ILogger logger)
     {
-        public FusionAPI.Interfaces.ILogger Logger { get; } = logger;
+        public FusionAPI.Data.Interfaces.ILogger Logger { get; } = logger;
 
         private readonly List<IBlacklistModule> _modules = [];
 

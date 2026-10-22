@@ -75,9 +75,9 @@ namespace FLB_API
         public string LogLevelString { get; set; } = "INFO";
 
         [JsonIgnore]
-        public FusionAPI.Interfaces.ILogger.LogLevel LogLevel
+        public FusionAPI.Data.Interfaces.ILogger.LogLevel LogLevel
         {
-            get => Enum.Parse<FusionAPI.Interfaces.ILogger.LogLevel>(LogLevelString);
+            get => Enum.Parse<FusionAPI.Data.Interfaces.ILogger.LogLevel>(LogLevelString);
             set
             {
                 var @enum = Enum.GetName(value);

@@ -12,11 +12,11 @@ namespace FLB_API.Blacklist.Modules
 
         private BlacklistManager? Instance { get; set; }
 
-        private FusionAPI.Interfaces.ILogger? Logger { get; set; }
+        private FusionAPI.Data.Interfaces.ILogger? Logger { get; set; }
 
         private bool Deinitialized = false;
 
-        public async Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Interfaces.ILogger logger)
+        public async Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Data.Interfaces.ILogger logger)
         {
             Instance = manager;
             Logger = logger;

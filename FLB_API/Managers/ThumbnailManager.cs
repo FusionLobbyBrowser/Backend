@@ -9,15 +9,15 @@ using SixLabors.ImageSharp.Processing;
 
 namespace FLB_API.Managers
 {
-    public static partial class ModIOManager
+    public static partial class ThumbnailManager
     {
         private const int GameId = 3809;
 
         private const int CollectionId = 92630;
 
-        internal static readonly List<MemoryThumbnail> Thumbnails = new(1000);
+        internal static readonly List<MemoryThumbnail> Thumbnails = [with(1000)];
 
-        public static bool IsSetup { get; private set; } = false;
+        public static bool IsSetup { get; private set; }
 
         private static readonly Lock Lock = new();
 
@@ -56,7 +56,7 @@ namespace FLB_API.Managers
                     foreach (var r in toRemove)
                     {
                         r.Image = null;
-                        r.Barcodes = null;
+                        r.Barcodes = [];
                         r.ExpireTime = null;
                         r.ModId = -1;
                         Thumbnails.Remove(r);
@@ -330,14 +330,14 @@ namespace FLB_API.Managers
         public bool IsNsfw { get; set; } = isNsfw;
 
         // Sometimes the levels do not have a mod id associated, this will be used to counter that
-        public List<string>? Barcodes { get; set; } = [];
+        public List<string> Barcodes { get; set; } = [];
 
         public DateTimeOffset? ExpireTime { get; set; } = expire;
 
         ~MemoryThumbnail()
         {
             Image = null;
-            Barcodes = null;
+            Barcodes = [];
             ExpireTime = null;
             ModId = -1;
         }

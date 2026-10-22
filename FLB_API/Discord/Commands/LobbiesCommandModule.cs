@@ -202,7 +202,7 @@ namespace FLB_API.Discord.Commands
             var username = RemoveUnityRichText(p.Username);
             var d = RemoveUnityRichText(p.Description);
             var name = string.IsNullOrWhiteSpace(nickname) ? (username ?? "N/A") : nickname;
-            var isAvatarWrong = await ModIOManager.IsNsfw(p.AvatarModID);
+            var isAvatarWrong = await ThumbnailManager.IsNsfw(p.AvatarModID);
             string avatar;
             if (!isAvatarWrong)
                 avatar = (p.AvatarModID != -1 ? $"[{RemoveUnityRichText(p.AvatarTitle ?? "N/A")}](https://mod.io/search/mods/{p.AvatarModID})" : $"{RemoveUnityRichText(p.AvatarTitle ?? "N/A")}");

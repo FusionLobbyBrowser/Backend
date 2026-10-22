@@ -4,7 +4,7 @@
     {
         public string Id { get; }
 
-        public Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Interfaces.ILogger logger);
+        public Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Data.Interfaces.ILogger logger);
 
         public Task<bool> DeInitAsync();
 

@@ -1,5 +1,6 @@
-﻿using FusionAPI.Data.Enums;
-using FusionAPI.Interfaces;
+﻿using FusionAPI.Data;
+using FusionAPI.Data.Enums;
+using FusionAPI.Data.Interfaces;
 
 using SteamKit2;
 using SteamKit2.Authentication;
@@ -7,7 +8,7 @@ using SteamKit2.Authentication;
 using static SteamKit2.SteamMatchmaking;
 using static SteamKit2.SteamMatchmaking.Lobby;
 
-namespace FusionAPI
+namespace FusionAPI.Handlers
 {
     public class SteamKitHandler : IMatchmakingHandler
     {
@@ -35,11 +36,13 @@ namespace FusionAPI
 
         private ILogger? Logger { get; set; }
 
-        private string? previouslyStoredGuardData;
+        private string? _previouslyStoredGuardData;
 
         private long ReconnectTime { get; set; } = -1;
 
         public DateTimeOffset LastFetch { get; private set; } = DateTimeOffset.UtcNow;
+
+        private bool _deInitialized = false;
 
         public string ID => "Steam";
 
@@ -55,15 +58,13 @@ namespace FusionAPI
             CallbackManager.Subscribe<SteamUser.LoggedOnCallback>(LoggedOnCallback);
             CallbackManager.Subscribe<SteamUser.LoggedOffCallback>(LoggedOffCallback);
             CallbackManager.Subscribe<SteamFriends.FriendsListCallback>(FriendsListCallback);
-
-            Task.Run(CallbackLoop);
         }
 
         private async Task? CallbackLoop()
         {
-            while (true)
+            while (!_deInitialized)
             {
-                // in order for the callbacks to get routed, they need to be handled by the manager
+                // In order for the callbacks to get routed, they need to be handled by the manager
                 CallbackManager?.RunCallbacks();
                 await Task.Delay(50);
             }
@@ -74,7 +75,7 @@ namespace FusionAPI
             FriendsList = callback.FriendList;
         }
 
-        private async void ConnectedCallback(SteamClient.ConnectedCallback callback)
+        private async Task ConnectedCallback(SteamClient.ConnectedCallback callback)
         {
             try
             {
@@ -92,12 +93,12 @@ namespace FusionAPI
                     IsPersistentSession = true,
                     PlatformType = SteamKit2.Internal.EAuthTokenPlatformType.k_EAuthTokenPlatformType_SteamClient,
                     Authenticator = Authenticator ?? new UserConsoleAuthenticator(),
-                    GuardData = previouslyStoredGuardData,
+                    GuardData = _previouslyStoredGuardData,
                 });
 
                 var pollResponse = await authSession.PollingWaitForResultAsync();
                 if (pollResponse.NewGuardData != null)
-                    previouslyStoredGuardData = pollResponse.NewGuardData;
+                    _previouslyStoredGuardData = pollResponse.NewGuardData;
 
                 SteamUser?.LogOn(new SteamUser.LogOnDetails()
                 {
@@ -127,10 +128,10 @@ namespace FusionAPI
             }
         }
 
-        private void DisconnectedCallback(SteamClient.DisconnectedCallback callback)
+        private async Task DisconnectedCallback(SteamClient.DisconnectedCallback callback)
         {
             Logger?.Info("Disconnected from Steam.");
-            Task.Run(async () => await ReconnectAsync());
+            await ReconnectAsync();
         }
 
         private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
@@ -197,7 +198,7 @@ namespace FusionAPI
             if (Matchmaking == null)
                 return [];
 
-            var task = Matchmaking.GetLobbyList(Fusion.AppID, filters, maxLobbies: int.MaxValue);
+            var task = Matchmaking.GetLobbyList(Fusion.APP_ID, filters, maxLobbies: int.MaxValue);
             GetLobbyListCallback? lobbies = null;
             if (task != null)
                 lobbies = await task.ToTask();
@@ -218,6 +219,8 @@ namespace FusionAPI
 
         public async Task Init(ILogger logger, Dictionary<string, string> metadata)
         {
+            _deInitialized = false;
+
             if (!metadata.TryGetValue("username", out var value1) || !metadata.TryGetValue("password", out string? value))
                 throw new AuthenticationException("SteamKitHandler requires 'username' and 'password' in metadata to initialize!");
 
@@ -240,8 +243,25 @@ namespace FusionAPI
                 while (!IsInitialized)
                     await ReconnectAsync(false);
             }
+
+            _ = Task.Run(CallbackLoop);
+
             while (!IsInitialized)
                 await Task.Delay(250);
+        }
+
+        public Task DeInit()
+        {
+            try
+            {
+                _deInitialized = true;
+                SteamClient?.Disconnect();
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException(ex);
+            }
         }
 
         internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby

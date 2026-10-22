@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace FusionAPI.Interfaces
+namespace FusionAPI.Data.Interfaces
 {
     public interface ILogger
     {

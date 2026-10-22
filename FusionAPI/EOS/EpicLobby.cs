@@ -1,23 +1,26 @@
 ﻿using Epic.OnlineServices;
 using Epic.OnlineServices.Lobby;
 
-namespace FusionAPI.EOS.Lobby;
+namespace FusionAPI.EOS;
 
-internal class EOSLobby : EOSInterface
+internal class EpicLobby : EpicInterface
 {
-    internal EOSRuntime Runtime;
+    internal EpicRuntime Runtime;
     internal LobbyInterface LobbyInterface;
-    internal ProductUserId LocalUserId;
+    internal ProductUserId? LocalUserId;
 
-    internal EOSLobby(EOSRuntime eosRuntime, LobbyInterface lobbyInterface, ProductUserId localUserId)
+    internal EpicLobby(EpicRuntime eosRuntime, LobbyInterface lobbyInterface, ProductUserId? localUserId)
     {
         Runtime = eosRuntime;
         LobbyInterface = lobbyInterface;
         LocalUserId = localUserId;
     }
 
-    internal string GetAttribute(LobbyDetails lobbyDetails, string key)
+    internal static string GetAttribute(LobbyDetails? lobbyDetails, string key)
     {
+        if (lobbyDetails == null)
+            return string.Empty;
+
         var lobbyDetailsCopyAttributeByKeyOptions = new LobbyDetailsCopyAttributeByKeyOptions
         {
             AttrKey = key
@@ -25,9 +28,7 @@ internal class EOSLobby : EOSInterface
 
         var result = lobbyDetails.CopyAttributeByKey(ref lobbyDetailsCopyAttributeByKeyOptions, out var attribute);
         if (result == Result.Success && attribute.HasValue)
-        {
             return attribute.Value.Data?.Value.AsUtf8 ?? string.Empty;
-        }
 
         return string.Empty;
     }

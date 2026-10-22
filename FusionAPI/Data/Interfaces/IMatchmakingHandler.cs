@@ -1,4 +1,4 @@
-﻿namespace FusionAPI.Interfaces
+﻿namespace FusionAPI.Data.Interfaces
 {
     public interface IMatchmakingHandler
     {
@@ -17,5 +17,7 @@
         /// Metadata used in case the handler requires additional info, for example username and password
         /// </param>
         public Task Init(ILogger logger, Dictionary<string, string> metadata);
+
+        public Task DeInit();
     }
 }

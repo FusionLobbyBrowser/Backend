@@ -2,17 +2,20 @@
 using Epic.OnlineServices.Logging;
 using Epic.OnlineServices.Platform;
 
-using FusionAPI.Interfaces;
+using FusionAPI.Data.Interfaces;
 
-namespace FusionAPI.EOS.Platform;
+namespace FusionAPI.EOS;
 
-internal class EOSPlatform : EOSInterface
+internal class EpicPlatform : EpicInterface
 {
     private const string ProductName = "Fusion";
     private const string ProductVersion = "0.0.1";
     private const string ProductId = "29e074d5b4724f3bb01f26b7e33d2582";
     private const string ClientId = "xyza78915hKqxe2TNTavpq2sxBDvJ9AH";
+#pragma warning disable S6418
     private const string ClientSecret = "SWDxYlWWsEgvmD0o3qAm2RMZoSZzOfYo5yvX/uikH94";
+
+#pragma warning restore S6418
     private const string SandboxId = "26f32d66d87f4dfeb4a7449b776a41f1";
     private const string DeploymentId = "f3fdf691aa6c4004abdb1e19665c1429";
     private const PlatformFlags Flags = PlatformFlags.DisableOverlay | PlatformFlags.DisableSocialOverlay;
@@ -21,53 +24,51 @@ internal class EOSPlatform : EOSInterface
     internal PlatformInterface? PlatformInterface;
     internal ILogger? Logger;
 
-    internal override async Task<bool> InitializeAsync(ILogger logger, ThreadDispatcher dispatcher)
+    internal override Task<bool> InitializeAsync(ILogger logger, ThreadDispatcher dispatcher)
     {
-        Logger = logger;
-        if (!InitializePlatform())
-            return false;
-
-        if (!CreatePlatform(out PlatformInterface))
-            return false;
+        try
+        {
+            Logger = logger;
+            if (!InitializePlatform() || !CreatePlatform(out PlatformInterface))
+                return Task.FromResult(false);
 
 #if DEBUG
-        LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Info);
-        LoggingInterface.SetCallback((ref LogMessage message) =>
-        {
-            switch (message.Level)
+            LoggingInterface.SetLogLevel(LogCategory.AllCategories, LogLevel.Info);
+            LoggingInterface.SetCallback((ref message) =>
             {
-                case LogLevel.Info:
-                    Logger?.Info($"[{message.Category}] {message.Message}");
-                    break;
+                switch (message.Level)
+                {
+                    case LogLevel.Info:
+                        Logger?.Info($"[{message.Category}] {message.Message}");
+                        break;
 
-                case LogLevel.Warning:
-                    Logger?.Warning($"[{message.Category}] {message.Message}");
-                    break;
+                    case LogLevel.Warning:
+                        Logger?.Warning($"[{message.Category}] {message.Message}");
+                        break;
 
-                case LogLevel.Error:
-                    Logger?.Error($"[{message.Category}] {message.Message}");
-                    break;
+                    case LogLevel.Error:
+                        Logger?.Error($"[{message.Category}] {message.Message}");
+                        break;
 
-                case LogLevel.Fatal:
-                    Logger?.Error($"[FATAL] [{message.Category}] {message.Message}");
-                    break;
+                    case LogLevel.Fatal:
+                        Logger?.Error($"[FATAL] [{message.Category}] {message.Message}");
+                        break;
 
-                case LogLevel.Off:
-                case LogLevel.Verbose:
-                case LogLevel.VeryVerbose:
-                    Logger?.Trace($"[{message.Category}] {message.Message}");
-                    break;
-
-                default:
-                    Logger?.Trace($"[{message.Category}] {message.Message}");
-                    break;
-            }
-        });
+                    default: // Includes Off, Verbose and VeryVerbose
+                        Logger?.Trace($"[{message.Category}] {message.Message}");
+                        break;
+                }
+            });
 #endif
 
-        InitializeTicker(dispatcher);
+            InitializeTicker(dispatcher);
 
-        return true;
+            return Task.FromResult(true);
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException<bool>(exception);
+        }
     }
 
     private bool InitializePlatform()
@@ -84,7 +85,7 @@ internal class EOSPlatform : EOSInterface
         return false;
     }
 
-    private bool CreatePlatform(out PlatformInterface platformInterface)
+    private bool CreatePlatform(out PlatformInterface? platformInterface)
     {
         var options = new Options
         {
@@ -94,7 +95,9 @@ internal class EOSPlatform : EOSInterface
             ClientCredentials = new ClientCredentials
             {
                 ClientId = ClientId,
+#pragma warning disable S6418
                 ClientSecret = ClientSecret
+#pragma warning restore S6418
             },
             Flags = Flags
         };
@@ -123,9 +126,9 @@ internal class EOSPlatform : EOSInterface
         {
             while (PlatformInterface != null)
             {
-                await Task.Delay(50).ConfigureAwait(true);
                 try
                 {
+                    await Task.Delay((int)(TickInterval * 1000)).ConfigureAwait(true);
                     PlatformInterface?.Tick();
                 }
                 catch (Exception ex)

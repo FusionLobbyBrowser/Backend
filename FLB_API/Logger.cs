@@ -1,7 +1,7 @@
 ﻿using Spectre.Console;
 
-using ILogger = FusionAPI.Interfaces.ILogger;
-using LogLevel = FusionAPI.Interfaces.ILogger.LogLevel;
+using ILogger = FusionAPI.Data.Interfaces.ILogger;
+using LogLevel = FusionAPI.Data.Interfaces.ILogger.LogLevel;
 
 namespace FLB_API
 {

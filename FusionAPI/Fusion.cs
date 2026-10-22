@@ -1,12 +1,12 @@
 ﻿using FusionAPI.Data.Containers;
 using FusionAPI.Data.Enums;
-using FusionAPI.Interfaces;
+using FusionAPI.Data.Interfaces;
 
 namespace FusionAPI
 {
     public class Fusion(IMatchmakingHandler handler)
     {
-        public const uint AppID = 250820;
+        public const uint APP_ID = 250820;
 
         public IMatchmakingHandler Handler { get; set; } = handler;
 
@@ -88,19 +88,13 @@ namespace FusionAPI
             if (!friendsOnlyLobbies && metadata.LobbyInfo.Privacy == ServerPrivacy.FRIENDS_ONLY)
                 return false;
 
-            if (!includeFull && metadata.LobbyInfo.PlayerCount == metadata.LobbyInfo.MaxPlayers)
-                return false;
-
-            return true;
+            return includeFull || metadata.LobbyInfo.PlayerCount != metadata.LobbyInfo.MaxPlayers;
         }
-
-        internal static bool IsTypeNumber(Type type)
-            => type == typeof(int) || type == typeof(long) || type == typeof(ulong);
     }
 
     public struct UptimeData
     {
-        public long Uptime;
-        public ServerPrivacy Privacy;
+        public long Uptime { get; set; }
+        public ServerPrivacy Privacy { get; set; }
     }
 }

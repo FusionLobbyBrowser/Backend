@@ -1,12 +1,11 @@
 ﻿using System.Text.Json;
 
-using FusionAPI.Data.Containers;
 using FusionAPI.Data.Enums;
-using FusionAPI.Interfaces;
+using FusionAPI.Data.Interfaces;
 
 using Steamworks.Data;
 
-namespace FusionAPI
+namespace FusionAPI.Data.Containers
 {
     public class LobbyMetadataInfo
     {

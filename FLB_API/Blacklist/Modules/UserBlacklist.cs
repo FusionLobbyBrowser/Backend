@@ -13,11 +13,11 @@ namespace FLB_API.Blacklist.Modules
 
         private BlacklistManager? Instance { get; set; }
 
-        private FusionAPI.Interfaces.ILogger? Logger { get; set; }
+        private FusionAPI.Data.Interfaces.ILogger? Logger { get; set; }
 
-        private bool Deinitialized = false;
+        private bool _deinitialized = false;
 
-        public const string RepositoryURL = $"https://raw.githubusercontent.com/Lakatrazz/Fusion-Lists/{Branch}/";
+        public const string RepositoryUrl = $"https://raw.githubusercontent.com/Lakatrazz/Fusion-Lists/{Branch}/";
 
         public const string Branch = "main";
 
@@ -27,20 +27,20 @@ namespace FLB_API.Blacklist.Modules
 
         public Task<bool> DeInitAsync()
         {
-            Deinitialized = true;
+            _deinitialized = true;
             LastFetch = null;
             return Task.FromResult(true);
         }
 
-        public async Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Interfaces.ILogger logger)
+        public async Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Data.Interfaces.ILogger logger)
         {
-            Deinitialized = false;
+            _deinitialized = false;
             Instance = manager;
             Logger = logger;
 
             _ = Task.Factory.StartNew(async () =>
             {
-                while (!Deinitialized)
+                while (!_deinitialized)
                 {
                     await LoadBans();
                     await Task.Delay(30 * 1000);
@@ -69,14 +69,14 @@ namespace FLB_API.Blacklist.Modules
             try
             {
                 Logger?.Info("Fetching global bans...");
-                var res = await HttpClient.GetAsync($"{RepositoryURL}globalBans.json");
+                var res = await HttpClient.GetAsync($"{RepositoryUrl}globalBans.json");
                 res?.EnsureSuccessStatusCode();
-                if (res == null || res.Content == null)
+                if (res?.Content == null)
                 {
                     Logger?.Error("Failed to fetch global bans: Response or content is null");
                     return;
                 }
-                GlobalBanList? list = await res?.Content?.ReadFromJsonAsync<GlobalBanList>();
+                var list = await res?.Content?.ReadFromJsonAsync<GlobalBanList>()!;
                 if (list != null)
                     RemoteList = list;
                 else
@@ -106,7 +106,7 @@ namespace FLB_API.Blacklist.Modules
                 {
                     Logger?.Info("Blacklisted users file is missing, creating...");
                     await using var stream = File.CreateText(path);
-                    var serialized = JsonSerializer.Serialize<GlobalBanList>(new());
+                    var serialized = JsonSerializer.Serialize(new GlobalBanList());
                     await stream.WriteAsync(serialized);
                     await stream.FlushAsync();
                     stream.Close();
@@ -114,11 +114,8 @@ namespace FLB_API.Blacklist.Modules
                 else
                 {
                     await using var file = File.OpenRead(path);
-                    if (file != null)
-                    {
-                        LocalList = await JsonSerializer.DeserializeAsync<GlobalBanList>(file) ?? new();
-                        Logger?.Info($"Successfully loaded blacklisted users! ({LocalList?.Bans?.Count ?? 0} users)");
-                    }
+                    LocalList = await JsonSerializer.DeserializeAsync<GlobalBanList>(file) ?? new GlobalBanList();
+                    Logger?.Info($"Successfully loaded blacklisted users! ({LocalList?.Bans?.Count ?? 0} users)");
                 }
             }
             catch (Exception ex)
@@ -138,17 +135,17 @@ namespace FLB_API.Blacklist.Modules
         public string? Reason { get; set; } = null;
 
         [JsonPropertyName("games")]
-        public List<GameInfo> Games { get; set; } = new();
+        public List<GameInfo> Games { get; set; } = [];
 
         [JsonPropertyName("platforms")]
-        public List<PlatformInfo> Platforms { get; set; } = new();
+        public List<PlatformInfo> Platforms { get; set; } = [];
     }
 
     [Serializable]
     public class GlobalBanList
     {
         [JsonPropertyName("bans")]
-        public List<GlobalBanInfo> Bans { get; set; } = new();
+        public List<GlobalBanInfo> Bans { get; set; } = [];
     }
 
     [Serializable]

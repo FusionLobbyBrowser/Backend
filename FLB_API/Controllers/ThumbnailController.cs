@@ -93,7 +93,7 @@ namespace FLB_API.Controllers
             {
                 try
                 {
-                    thumbnail = await ModIOManager.GetModThumbnail(modId, barcode);
+                    thumbnail = await ThumbnailManager.GetModThumbnail(modId, barcode);
                     if (thumbnail == null)
                         return Problem("Thumbnail not found.", title: "Not Found", statusCode: 404);
                 }

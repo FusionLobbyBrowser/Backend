@@ -3,20 +3,20 @@
 using Epic.OnlineServices;
 using Epic.OnlineServices.Connect;
 
-using FusionAPI.Interfaces;
+using FusionAPI.Data.Interfaces;
 
-namespace FusionAPI.EOS.Connect;
+namespace FusionAPI.EOS;
 
-internal class EOSConnect : EOSInterface
+internal class EpicConnect : EpicInterface
 {
     internal ConnectInterface ConnectInterface;
-    internal ProductUserId LocalUserId;
-    internal string LocalDisplayName;
+    internal ProductUserId? LocalUserId;
+    internal string? LocalDisplayName;
     internal ulong ExpirationNotificationId;
 
-    internal ILogger Logger;
+    internal ILogger? Logger;
 
-    internal EOSConnect(ConnectInterface connectInterface)
+    internal EpicConnect(ConnectInterface connectInterface)
     {
         ConnectInterface = connectInterface;
     }
@@ -36,7 +36,7 @@ internal class EOSConnect : EOSInterface
         };
 
         var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        ConnectInterface.CreateDeviceId(ref createDeviceIdOptions, null, ((ref CreateDeviceIdCallbackInfo data) =>
+        ConnectInterface.CreateDeviceId(ref createDeviceIdOptions, null, (ref data) =>
         {
             if (data.ResultCode is Result.Success or Result.DuplicateNotAllowed)
             {
@@ -45,15 +45,15 @@ internal class EOSConnect : EOSInterface
             else
             {
                 tcs.SetResult(null);
-                Logger.Error($"CreateDeviceId failed: {data.ResultCode}");
+                Logger?.Error($"CreateDeviceId failed: {data.ResultCode}");
             }
-        }));
+        });
 
         var token = await tcs.Task;
 
         if (token == null)
         {
-            Logger.Error($"Failed to retrieve token");
+            Logger?.Error("Failed to retrieve token");
             return false;
         }
 
@@ -73,7 +73,7 @@ internal class EOSConnect : EOSInterface
         };
 
         var loginTcs = new TaskCompletionSource<(bool success, ContinuanceToken? continuance)>(TaskCreationOptions.RunContinuationsAsynchronously);
-        ConnectInterface.Login(ref loginOptions, null, (ref LoginCallbackInfo data) =>
+        ConnectInterface.Login(ref loginOptions, null, (ref data) =>
         {
             switch (data.ResultCode)
             {
@@ -87,7 +87,7 @@ internal class EOSConnect : EOSInterface
                     break;
 
                 default:
-                    Logger.Error($"EOS Login failed: {data.ResultCode}");
+                    Logger?.Error($"EOS Login failed: {data.ResultCode}");
                     loginTcs.SetResult((false, null));
                     break;
             }
@@ -102,9 +102,8 @@ internal class EOSConnect : EOSInterface
                 ContinuanceToken = continuanceToken
             };
 
-            var createUserFinished = false;
             var connnectTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            ConnectInterface.CreateUser(ref createUserOptions, null, (ref CreateUserCallbackInfo data) =>
+            ConnectInterface.CreateUser(ref createUserOptions, null, (ref data) =>
             {
                 if (data.ResultCode == Result.Success)
                 {
@@ -113,28 +112,25 @@ internal class EOSConnect : EOSInterface
                 }
                 else
                 {
-                    Logger.Error($"CreateUser failed: {data.ResultCode}");
+                    Logger?.Error($"CreateUser failed: {data.ResultCode}");
                     connnectTcs.SetResult(false);
                 }
-
-                createUserFinished = true;
             });
 
-            await connnectTcs.Task;
+            loginSuccess = await connnectTcs.Task;
         }
 
-        var success = LocalUserId != null;
-        if (success)
+        if (loginSuccess)
             RegisterAuthExpiration();
 
-        return success;
+        return loginSuccess;
     }
 
     private void RegisterAuthExpiration()
     {
         UnregisterAuthExpiration();
         var options = new AddNotifyAuthExpirationOptions();
-        ExpirationNotificationId = ConnectInterface.AddNotifyAuthExpiration(ref options, null, (ref AuthExpirationCallbackInfo _) => RefreshTokenAsync().ConfigureAwait(false));
+        ExpirationNotificationId = ConnectInterface.AddNotifyAuthExpiration(ref options, null, (ref _) => RefreshTokenAsync().ConfigureAwait(false));
         return;
 
         async Task RefreshTokenAsync()
@@ -142,21 +138,21 @@ internal class EOSConnect : EOSInterface
             var success = await LoginAsync();
             if (success)
             {
-                Logger.Info("EOS token refreshed successfully.");
+                Logger?.Info("EOS token refreshed successfully.");
                 RegisterAuthExpiration();
             }
             else
             {
-                Logger.Error("EOS token refresh failed - attempting to re-authenticate...");
+                Logger?.Error("EOS token refresh failed - attempting to re-authenticate...");
                 LocalUserId = null;
                 var authSuccess = await LoginAsync();
                 if (authSuccess)
                 {
-                    Logger.Info($"Logged back in successfully!");
+                    Logger?.Info("Logged back in successfully!");
                 }
                 else
                 {
-                    Logger.Error("Failed to re-authenticate");
+                    Logger?.Error("Failed to re-authenticate");
                     LocalUserId = null;
                 }
             }

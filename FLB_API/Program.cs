@@ -9,7 +9,8 @@ using FLB_API.Managers;
 
 using FusionAPI;
 using FusionAPI.Data.Containers;
-using FusionAPI.Interfaces;
+using FusionAPI.Data.Interfaces;
+using FusionAPI.Handlers;
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,7 @@ using Serilog.Sinks.Spectre;
 
 using Spectre.Console;
 
-using ILogger = FusionAPI.Interfaces.ILogger;
+using ILogger = FusionAPI.Data.Interfaces.ILogger;
 
 namespace FLB_API
 {
@@ -46,7 +47,7 @@ namespace FLB_API
 
         internal static Settings? Settings { get; private set; }
 
-        internal static BlacklistManager Blacklist { get; private set; }
+        internal static BlacklistManager? Blacklist { get; private set; }
 
         internal static IMAPManager? ImapManager { get; private set; }
 
@@ -131,7 +132,7 @@ namespace FLB_API
                 SteamLogger = new Logger(level, "Steam");
                 await SteamClient.Initialize(SteamLogger, metadata);
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
-                EpicClient = new Fusion(new EOSHandler());
+                EpicClient = new Fusion(new EpicHandler());
                 var eosLogger = new Logger(level, "EOS");
                 await EpicClient.Initialize(eosLogger, []);
                 Logger?.Information("Successfully initialized EOS API");
@@ -172,11 +173,8 @@ namespace FLB_API
                 })
                 .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
 
-            builder.Services.AddControllers().AddJsonOptions(options => { options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()); }); ;
-            builder.Services.AddOpenApi(options =>
-            {
-                options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1;
-            });
+            builder.Services.AddControllers().AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+            builder.Services.AddOpenApi(options => options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1);
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
@@ -232,7 +230,7 @@ namespace FLB_API
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
 
-            _ = ModIOManager.Setup();
+            _ = ThumbnailManager.Setup();
 
             await app.RunAsync();
 
@@ -405,12 +403,11 @@ namespace FLB_API
 
         public static async Task<LobbyListResponse> CreateResponse(LobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
         {
-            var converted = await lobbies.Select(x => x.Convert()).Where(async x => await Blacklist.IsAllowed(x));
+            var converted = await lobbies.Select(x => x.Convert()).Where(async x => Blacklist == null || await Blacklist.IsAllowed(x));
             return new LobbyListResponse([.. converted], date, interval, friends ?? []);
         }
 
-        static async Task<IEnumerable<T>> Where<T>(
-            this IEnumerable<T> source, Func<T, Task<bool>> predicate)
+        private static async Task<IEnumerable<T>> Where<T>(this IEnumerable<T> source, Func<T, Task<bool>> predicate)
         {
             var results = new ConcurrentQueue<T>();
             var tasks = source.Select(
@@ -443,7 +440,7 @@ namespace FLB_API
                 return [];
             }
 
-            var filtered = await lobbies.Select(x => x.Convert()).Where(async x => await Blacklist.IsAllowed(x));
+            var filtered = await lobbies.Select(x => x.Convert()).Where(async x => Blacklist == null || await Blacklist.IsAllowed(x));
             Logger?.Information($"Successfully fetched {name} lobbies ({filtered.Count()} -> {lobbies.Length - filtered.Count()} filtered out)... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
 
             return [.. filtered];

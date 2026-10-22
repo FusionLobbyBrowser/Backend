@@ -1,10 +1,11 @@
-﻿using FusionAPI.Data.Enums;
-using FusionAPI.Interfaces;
+﻿using FusionAPI.Data;
+using FusionAPI.Data.Enums;
+using FusionAPI.Data.Interfaces;
 
 using Steamworks;
 using Steamworks.Data;
 
-namespace FusionAPI
+namespace FusionAPI.Handlers
 {
     public class SteamworksHandler : IMatchmakingHandler
     {
@@ -59,8 +60,21 @@ namespace FusionAPI
             Dispatch.OnDebugCallback += SteamworksDebug;
             Dispatch.OnException += SteamworksError;
 #pragma warning restore S2696, IDE0079
-            SteamClient.Init(Fusion.AppID);
+            SteamClient.Init(Fusion.APP_ID);
             return !SteamClient.IsValid ? throw new InvalidOperationException("Steamworks failed to initialize!") : Task.CompletedTask;
+        }
+
+        public Task DeInit()
+        {
+            try
+            {
+                SteamClient.Shutdown();
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException(ex);
+            }
         }
 
         private void SteamworksDebug(CallbackType type, string msg, bool server)
@@ -72,17 +86,17 @@ namespace FusionAPI
 
     internal class SteamworksLobby(Lobby lobby) : IMatchmakingLobby
     {
-        private Lobby lobby = lobby;
-        public string Owner => lobby.Owner.Id.ToString();
+        private Lobby _lobby = lobby;
+        public string Owner => _lobby.Owner.Id.ToString();
 
-        public bool IsOwnerMe => lobby.Owner.IsMe;
+        public bool IsOwnerMe => _lobby.Owner.IsMe;
 
         public string GetData(string key)
-            => lobby.GetData(key);
+            => _lobby.GetData(key);
 
         public bool TryGetData(string key, out string value)
         {
-            value = lobby.GetData(key);
+            value = _lobby.GetData(key);
             return !string.IsNullOrWhiteSpace(value);
         }
     }

@@ -1,19 +1,16 @@
-﻿using FusionAPI.EOS.Connect;
-using FusionAPI.EOS.Lobby;
-using FusionAPI.EOS.Platform;
-using FusionAPI.Interfaces;
+﻿using FusionAPI.Data.Interfaces;
 
 namespace FusionAPI.EOS;
 
-internal class EOSRuntime
+internal class EpicRuntime
 {
-    internal ILogger Logger { get; set; }
+    internal ILogger? Logger { get; set; }
 
-    internal EOSPlatform Platform { get; private set; }
-    internal EOSConnect Connect { get; private set; }
-    internal EOSLobby Lobby { get; private set; }
+    internal EpicPlatform? Platform { get; private set; }
+    internal EpicConnect? Connect { get; private set; }
+    internal EpicLobby? Lobby { get; private set; }
 
-    internal ThreadDispatcher Dispatcher { get; private set; }
+    internal ThreadDispatcher? Dispatcher { get; private set; }
 
     public bool IsInitialized { get; private set; }
 
@@ -21,7 +18,7 @@ internal class EOSRuntime
     {
         if (IsInitialized)
         {
-            Logger.Warning("EOS is already initialized");
+            Logger?.Warning("EOS is already initialized");
             return Task.FromResult(true);
         }
 
@@ -30,16 +27,16 @@ internal class EOSRuntime
         Dispatcher = new ThreadDispatcher();
         return Dispatcher.RunOnThreadAsync(async () =>
         {
-            Platform = new EOSPlatform();
+            Platform = new EpicPlatform();
             var platformSuccess = await Platform.InitializeAsync(Logger, Dispatcher);
-            if (!platformSuccess)
+            if (!platformSuccess || Platform.PlatformInterface == null)
                 return false;
 
 #if DEBUG
             Logger.Info("Initialized Platform");
 #endif
 
-            Connect = new EOSConnect(Platform.PlatformInterface.GetConnectInterface());
+            Connect = new EpicConnect(Platform.PlatformInterface.GetConnectInterface());
             var connectSuccess = await Connect.InitializeAsync(Logger, Dispatcher);
             if (!connectSuccess)
             {
@@ -51,7 +48,7 @@ internal class EOSRuntime
             Logger.Info("Initialized Connect");
 #endif
 
-            Lobby = new EOSLobby(this, Platform.PlatformInterface.GetLobbyInterface(), Connect.LocalUserId);
+            Lobby = new EpicLobby(this, Platform.PlatformInterface.GetLobbyInterface(), Connect.LocalUserId);
             var lobbySuccess = await Lobby.InitializeAsync(Logger, Dispatcher);
             if (!lobbySuccess)
             {
