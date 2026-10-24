@@ -16,7 +16,7 @@ namespace FLB_API.Controllers.Discord
         [EndpointSummary("Get the Discord icon of a specified guild")]
         [EndpointDescription("This is done to ensure that the CSP is strict and in case of any possible script injection attack there are as few as possible damages")]
         [ProducesResponseType<FileStreamResult>(200, "image/webp", Description = "Returns the Discord icon of the specified guild")]
-        [ProducesResponseType<ProblemDetails>(400, Description = "Invalid Guild ID, must be a number or the Discord API returned no icon for the specified ID")]
+        [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Invalid Guild ID, must be a number or the Discord API returned no icon for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "guildId")][Description("Guild ID of the guild you want to get the icon of")][Required] string guildId,
             [FromRoute(Name = "iconHash")][Description("Hash of the icon you want to get")][Required] string iconHash,
@@ -26,7 +26,7 @@ namespace FLB_API.Controllers.Discord
             if (!ulong.TryParse(guildId, out var id))
                 return Problem("Invalid Guild ID was provided, must be a number!", title: "Invalid ID", statusCode: 400);
 
-            var url = URL(id, Path.GetFileName(iconHash), size, animated);
+            var url = CdnUrl(id, Path.GetFileName(iconHash), size, animated);
 
             byte[] image;
             try
@@ -42,6 +42,6 @@ namespace FLB_API.Controllers.Discord
             return File(image, "image/webp");
         }
 
-        private static string URL(ulong id, string hash, int size = 256, bool animated = true) => $"https://cdn.discordapp.com/icons/{id}/{hash}.webp?size={size}&animated={animated}";
+        private static string CdnUrl(ulong id, string hash, int size = 256, bool animated = true) => $"https://cdn.discordapp.com/icons/{id}/{hash}.webp?size={size}&animated={animated}";
     }
 }

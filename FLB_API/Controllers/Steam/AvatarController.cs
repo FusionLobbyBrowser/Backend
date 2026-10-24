@@ -2,6 +2,7 @@
 using System.ComponentModel.DataAnnotations;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FLB_API.Controllers.Steam
 {
@@ -16,8 +17,8 @@ namespace FLB_API.Controllers.Steam
         [EndpointSummary("Get the Steam avatar of a specified user")]
         [EndpointDescription("This is done to ensure that the CSP is strict and in case of any possible script injection attack there are as few as possible damages")]
         [ProducesResponseType<FileStreamResult>(200, "image/png", Description = "Returns the Steam avatar of the specified user")]
-        [ProducesResponseType<ProblemDetails>(500, Description = "Backend is not set up for using Steam API")]
-        [ProducesResponseType<ProblemDetails>(400, Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "Backend is not set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the avatar of")][Required] string steamId)
         {

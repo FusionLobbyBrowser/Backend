@@ -11,7 +11,7 @@ namespace FLB_API.Controllers
     [Route("thumbnail/{modId}")]
     public class ThumbnailController : ControllerBase
     {
-        private static readonly Dictionary<string, string> _vanilla = new()
+        private static Dictionary<string, string> Vanilla { get; } = new()
         {
             // Avatars
             ["fa534c5a83ee4ec6bd641fec424c4142.Avatar.Heavy"] = "Heavy",
@@ -68,32 +68,30 @@ namespace FLB_API.Controllers
             ["fa534c5a83ee4ec6bd641fec424c4142.Level.SceneparkourDistrictLogic"] = "Neon District Parkour",
         };
 
-        public static IReadOnlyDictionary<string, string> Vanilla => _vanilla.AsReadOnly();
-
         [HttpGet(Name = "GetThumbnail")]
         [Tags("Thumbnail")]
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
         [ProducesResponseType<FileStreamResult>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
-        [ProducesResponseType<ProblemDetails>(400, "application/json", Description = "The provided mod id is invalid or missing.")]
-        [ProducesResponseType<ProblemDetails>(500, "application/json", Description = "The server has encountered an error while fetching the thumbnail")]
-        [ProducesResponseType<ProblemDetails>(404, "application/json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "The provided mod id is invalid or missing.")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<ProblemDetails>(404, contentType: "application/problem+json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
         public async Task<IActionResult> Get(
-            [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modIdString,
+            [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modId,
             [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")] string barcode = "")
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
-            if (string.IsNullOrWhiteSpace(modIdString) && string.IsNullOrWhiteSpace(barcode))
+            if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
                 return Problem("modId is required.", title: "Missing Mod ID", statusCode: 400);
 
-            if (!long.TryParse(modIdString, out var modId) && string.IsNullOrWhiteSpace(barcode))
+            if (!long.TryParse(modId, out var modIdNum) && string.IsNullOrWhiteSpace(barcode))
                 return Problem("modId is not valid.", title: "Invalid Mod ID", statusCode: 400);
 
             MemoryThumbnail? thumbnail;
-            if (modId != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
+            if (modIdNum != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
             {
                 try
                 {
-                    thumbnail = await ThumbnailManager.GetModThumbnail(modId, barcode);
+                    thumbnail = await ThumbnailManager.GetModThumbnail(modIdNum, barcode);
                     if (thumbnail == null)
                         return Problem("Thumbnail not found.", title: "Not Found", statusCode: 404);
                 }
@@ -115,7 +113,7 @@ namespace FLB_API.Controllers
                 thumbnail = new MemoryThumbnail(-1, await System.IO.File.ReadAllBytesAsync(file), null);
             }
 
-            Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues(["ModIO-Maturity", "Server-Uptime"]);
+            Response.Headers.AccessControlExposeHeaders = [with(["ModIO-Maturity", "Server-Uptime"])];
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
             Response.Headers.Append("ModIO-Maturity", thumbnail.IsNsfw ? "nsfw" : "safe");
 

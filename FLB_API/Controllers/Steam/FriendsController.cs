@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 using Steam.Models.SteamCommunity;
 
@@ -24,9 +25,9 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam friends of the currently authenticated user")]
         [ProducesResponseType<List<JsonPlayerSummaryModel>>(200, "application/json", Description = "Returns the friends list of the specified user")]
-        [ProducesResponseType<ProblemDetails>(501, Description = "Attempted to check a friends list of a user you are not logged in as")]
-        [ProducesResponseType<ProblemDetails>(401, Description = "The user is not signed in or has their friends list private")]
-        [ProducesResponseType<ProblemDetails>(400, Description = "Steam API returned no friends for such ID")]
+        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "Attempted to check a friends list of a user you are not logged in as")]
+        [ProducesResponseType<ProblemDetails>(401, contentType: "application/problem+json", Description = "The user is not signed in or has their friends list private")]
+        [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Steam API returned no friends for such ID")]
         public async Task<IActionResult> Get()
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))

@@ -22,7 +22,7 @@ namespace FLB_API.Controllers
         [AllowAnonymous]
         [EndpointSummary("Get LabFusion lobbies")]
         [ProducesResponseType<LobbyListResponse>(200, "application/json", Description = "Returns a list of lobbies with the requested filters taken into consideration")]
-        [ProducesResponseType<ProblemDetails>(500, Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
         public async Task<IActionResult> GetLobbies(
             [FromQuery(Name = "platform")][Description("The provider to fetch the lobbies from. Leave empty to combine from all")][DefaultValue(Platform.All)] Platform platform = Platform.All,
             [FromQuery(Name = "includeFriendsOnly")][Description("Should friends only lobbies be considered. This will only additionally include lobbies hosted by the authorized user's friends")] bool friendsOnly = true)
@@ -38,11 +38,11 @@ namespace FLB_API.Controllers
         [AllowAnonymous]
         [EndpointSummary("Get a specified LabFusion lobby")]
         [ProducesResponseType<CustomLobbyInfo>(200, "application/json", Description = "Returns the specified lobby if found")]
-        [ProducesResponseType<ProblemDetails>(500, Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server is not able to fetch the lobbies from the third part provider or is in the process of doing so")]
         public async Task<IActionResult> GetLobby(
             [FromRoute(Name = "search")][Description("The search query to use for finding the lobby")] string search,
             [FromQuery(Name = "platform")][Description("The provider to fetch the lobbies from. Leave empty to combine from all")][DefaultValue(Platform.All)] Platform platform = Platform.All,
-            [FromQuery(Name = "searchType")][Description("The type of search to perform")][DefaultValue(SearchType.ID)] SearchType searchType = SearchType.ID,
+            [FromQuery(Name = "searchType")][Description("The type of search to perform")][DefaultValue(SearchType.Id)] SearchType searchType = SearchType.Id,
             [FromQuery(Name = "includeFriendsOnly")][Description("Should friends only lobbies be considered. This will only additionally include lobbies hosted by the authorized user's friends")] bool friendsOnly = true)
         {
             var (list, error) = await Lobbies(platform, friendsOnly);
@@ -52,7 +52,7 @@ namespace FLB_API.Controllers
             if (searchType is SearchType.Code or SearchType.All)
                 info = list!.Lobbies?.FirstOrDefault(l => l.LobbyCode == search);
 
-            if (info == null && (searchType is SearchType.ID or SearchType.All))
+            if (info == null && (searchType is SearchType.Id or SearchType.All))
                 info = list!.Lobbies?.FirstOrDefault(l => l.LobbyID == search);
 
             if (info != null)
@@ -67,17 +67,17 @@ namespace FLB_API.Controllers
             {
                 var handler = platform == Platform.Steam ? Program.SteamClient : Program.EpicClient;
                 if (handler?.Handler.IsInitialized != true)
-                    return new(null, Problem($"Server is not connected to {Enum.GetName(platform)}.", title: "Not Connected", statusCode: 500));
+                    return new Tuple<LobbyListResponse?, ActionResult?>(null, Problem($"Server is not connected to {Enum.GetName(platform)}.", title: "Not Connected", statusCode: 500));
             }
             else
             {
                 if (Program.SteamClient?.Handler.IsInitialized != true)
-                    return new(null, Problem("Server is not connected to Steam.", title: "Not Connected", statusCode: 500));
+                    return new Tuple<LobbyListResponse?, ActionResult?>(null, Problem("Server is not connected to Steam.", title: "Not Connected", statusCode: 500));
                 if (Program.EpicClient?.Handler.IsInitialized != true)
-                    return new(null, Problem("Server is not connected to Epic.", title: "Not Connected", statusCode: 500));
+                    return new Tuple<LobbyListResponse?, ActionResult?>(null, Problem("Server is not connected to Epic.", title: "Not Connected", statusCode: 500));
             }
 
-            Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
+            Response.Headers.AccessControlExposeHeaders = [with("Server-Uptime")];
             Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
 
             var list = platform switch
@@ -88,14 +88,14 @@ namespace FLB_API.Controllers
             };
 
             if (string.IsNullOrWhiteSpace(list?.Json))
-                return new(null, Problem("Did not fetch lobbies yet", title: "No Lobbies", statusCode: 500));
+                return new Tuple<LobbyListResponse?, ActionResult?>(null, Problem("Did not fetch lobbies yet", title: "No Lobbies", statusCode: 500));
 
             if (!friendsOnly)
-                return new(list, null);
+                return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
 
             var self = User.GetSteamId();
             if (self == -1 || string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.Json))
-                return new(list, null);
+                return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
 
             List<LobbyInfo> copy = [.. (LobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];
 
@@ -110,7 +110,7 @@ namespace FLB_API.Controllers
             }
 
             if (!(friends?.Length > 0))
-                return new(list, null);
+                return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
 
             copy =
             [
@@ -119,7 +119,7 @@ namespace FLB_API.Controllers
             ];
 
             list = await Program.CreateResponse([.. copy], DateTimeOffset.FromUnixTimeSeconds(list.Date), list.Interval, friends);
-            return new(list, null);
+            return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
         }
 
         public enum Platform
@@ -131,7 +131,7 @@ namespace FLB_API.Controllers
 
         public enum SearchType
         {
-            ID,
+            Id,
             Code,
             All
         }

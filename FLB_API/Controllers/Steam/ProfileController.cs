@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 using Steam.Models.SteamCommunity;
 
@@ -26,8 +27,8 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam profile of a specified user")]
         [ProducesResponseType<JsonPlayerSummaryModel>(200, "application/json", Description = "Returns the Steam profile of the specified user")]
-        [ProducesResponseType<ProblemDetails>(500, Description = "Backend is not set up for using Steam API")]
-        [ProducesResponseType<ProblemDetails>(400, Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "Backend is not set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the profile of")][Required] string steamId)
         {

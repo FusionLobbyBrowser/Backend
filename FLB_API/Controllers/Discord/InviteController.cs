@@ -18,6 +18,7 @@ namespace FLB_API.Controllers.Discord
         [EndpointSummary("Get info about a Discord invite")]
         [EndpointDescription("This is done to ensure that the CSP is strict and in case of any possible script injection attack there are as few as possible damages")]
         [ProducesResponseType<string>(200, "application/json", Description = "Returns the info about the Discord invite")]
+        [ProducesResponseType<ProblemDetails>(404, contentType: "application/problem+json", Description = "The Discord API threw an error when searching for the invite")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "inviteCode")][Description("The code of the invite that you want to get information about")][Required] string inviteCode)
         {

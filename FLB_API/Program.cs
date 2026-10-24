@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading.RateLimiting;
 
 using FLB_API.Blacklist;
 using FLB_API.Discord;
@@ -14,6 +15,7 @@ using FusionAPI.Handlers;
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 
 using Serilog;
