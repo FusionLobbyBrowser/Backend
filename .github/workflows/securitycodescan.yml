@@ -72,7 +72,7 @@ jobs:
               run.tool.driver.informationUri  = "https://security-code-scan.github.io";
 
               run.results = run.results.filter((e => e.ruleId.startsWith("SCS")));
-              run.tool.driver.rules = run.tool.driver.rules.filter((e => e.id.startsWith("SCS")));
+              if(run.tool.driver.rules) run.tool.driver.rules = run.tool.driver.rules.filter((e => e.id.startsWith("SCS")));
 
               for (let i = 0; i < run.results.length; ++i) {
                 run.results[i].ruleIndex = undefined;
