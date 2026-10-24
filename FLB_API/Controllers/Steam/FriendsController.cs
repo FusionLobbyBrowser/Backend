@@ -1,9 +1,7 @@
-﻿using System.ComponentModel;
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 
 using Steam.Models.SteamCommunity;
 
@@ -31,11 +29,11 @@ namespace FLB_API.Controllers.Steam
         public async Task<IActionResult> Get()
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Problem("Backend is not set up for using Steam API!", title: "Not Set Up", statusCode: 500);
+                return Problem("Backend is not set up for using Steam API!", statusCode: 500, title: "Not Set Up");
 
             var id = User.GetSteamId();
             if (User.GetSteamId() == -1)
-                return Problem("You must be signed in to check the Steam friends!", title: "Not Signed In", statusCode: 401);
+                return Problem("You must be signed in to check the Steam friends!", statusCode: 401, title: "Not Signed In");
 
             FriendsCache? friends;
             try
@@ -44,11 +42,11 @@ namespace FLB_API.Controllers.Steam
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                return Problem("The user has the friends list private!", title: "Private Friends List", statusCode: 401);
+                return Problem("The user has the friends list private!", statusCode: 401, title: "Private Friends List");
             }
 
             if (friends?.Friends == null || friends?.FriendsJson == null)
-                return Problem("Steam API returned no friends for such ID!", title: "No Friends", statusCode: 400);
+                return Problem("Steam API returned no friends for such ID!", statusCode: 400, title: "No Friends");
 
             return Program.CreateResult(friends.FriendsJson, contentType: "application.json");
         }

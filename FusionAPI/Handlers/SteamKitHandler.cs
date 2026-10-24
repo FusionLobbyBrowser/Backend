@@ -34,7 +34,7 @@ namespace FusionAPI.Handlers
 
         public IAuthenticator? Authenticator { get; set; }
 
-        private ILogger? Logger { get; set; }
+        public ILogger? Logger { get; private set; }
 
         private string? _previouslyStoredGuardData;
 
@@ -217,7 +217,7 @@ namespace FusionAPI.Handlers
             return list;
         }
 
-        public async Task Init(ILogger logger, Dictionary<string, string> metadata)
+        public async Task Init(ILogger? logger, Dictionary<string, string> metadata)
         {
             _deInitialized = false;
 
@@ -232,13 +232,13 @@ namespace FusionAPI.Handlers
 
             try
             {
-                Logger.Info("Connecting to Steam...");
+                Logger?.Info("Connecting to Steam...");
                 SteamClient?.Connect();
             }
             catch (Exception ex)
             {
-                Logger.Error("An error occurred while connecting to Steam: {0}", ex);
-                Logger.Error("A reconnection attempt will be made in 30 seconds...");
+                Logger?.Error("An error occurred while connecting to Steam: {0}", ex);
+                Logger?.Error("A reconnection attempt will be made in 30 seconds...");
                 await Task.Delay(30000);
                 while (!IsInitialized)
                     await ReconnectAsync(false);

@@ -7,14 +7,14 @@ using MimeKit;
 
 namespace FLB_API.Managers
 {
-    public partial class IMAPManager(string host, int port, Logger? logger = null)
+    public partial class IMAPManager(string host, int port, FusionAPI.Data.Interfaces.ILogger? logger = null)
     {
         public const string SUBJECT = "Your Steam account: Access from";
 
         public string Host { get; set; } = host;
         public int Port { get; set; } = port;
 
-        public Logger? Logger { get; set; } = logger;
+        public FusionAPI.Data.Interfaces.ILogger? Logger { get; set; } = logger;
 
         public ImapClient? Client { get; set; }
 
@@ -23,7 +23,7 @@ namespace FLB_API.Managers
             Logger?.Info("Logging in to IMAP server {0}:{1} with user {2}", Host, Port, username);
             Client = new ImapClient();
             AddEvents();
-            Client.Connect(Host, Port, MailKit.Security.SecureSocketOptions.Auto);
+            Client.Connect(Host, Port);
             Client.AuthenticationMechanisms.Remove("XOAUTH2");
             Client.Authenticate(username, password);
         }

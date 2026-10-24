@@ -19,6 +19,8 @@ namespace FusionAPI.Handlers
 
         public bool IsInitialized => Runtime?.IsInitialized ?? false;
 
+        public bool SupportsFriendsOnly { get; } = false;
+
         internal EpicRuntime? Runtime { get; private set; }
 
         public ILogger? Logger { get; private set; }
@@ -194,7 +196,7 @@ namespace FusionAPI.Handlers
             }
         }
 
-        public async Task Init(ILogger logger, Dictionary<string, string> metadata)
+        public async Task Init(ILogger? logger, Dictionary<string, string> metadata)
         {
             Logger = logger;
 
@@ -206,7 +208,7 @@ namespace FusionAPI.Handlers
             var name = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? string.Format(linuxFormat, architecture) : "EOSSDK-Win64-Shipping.dll";
 
             var path = Path.Combine(baseDirectory, name);
-            Logger.Info("Loading SDK from " + path);
+            Logger?.Info("Loading SDK from " + path);
             LibraryHandle = DllTools.LoadLibrary(path);
 
             if (LibraryHandle == IntPtr.Zero)
@@ -218,16 +220,16 @@ namespace FusionAPI.Handlers
                 DllResolverConfigured = true;
             }
 
-            Logger.Info("EOS SDK loaded from " + path);
+            Logger?.Info("EOS SDK loaded from " + path);
 
             Runtime = new EpicRuntime();
 
             var success = await Runtime.InitializeAsync(Logger);
 
             if (success)
-                Logger.Info("EOS initialized.");
+                Logger?.Info("EOS initialized.");
             else
-                Logger.Error("EOS initialization failed.");
+                Logger?.Error("EOS initialization failed.");
         }
 
         public Task DeInit()

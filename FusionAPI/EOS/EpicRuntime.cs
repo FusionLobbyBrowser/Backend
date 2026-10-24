@@ -14,7 +14,7 @@ internal class EpicRuntime
 
     public bool IsInitialized { get; private set; }
 
-    internal Task<bool> InitializeAsync(ILogger logger)
+    internal Task<bool> InitializeAsync(ILogger? logger)
     {
         if (IsInitialized)
         {
@@ -33,7 +33,7 @@ internal class EpicRuntime
                 return false;
 
 #if DEBUG
-            Logger.Info("Initialized Platform");
+            Logger?.Info("Initialized Platform");
 #endif
 
             Connect = new EpicConnect(Platform.PlatformInterface.GetConnectInterface());
@@ -45,7 +45,7 @@ internal class EpicRuntime
             }
 
 #if DEBUG
-            Logger.Info("Initialized Connect");
+            Logger?.Info("Initialized Connect");
 #endif
 
             Lobby = new EpicLobby(this, Platform.PlatformInterface.GetLobbyInterface(), Connect.LocalUserId);
@@ -57,7 +57,7 @@ internal class EpicRuntime
             }
 
 #if DEBUG
-            Logger.Info("Initialized Lobby");
+            Logger?.Info("Initialized Lobby");
 #endif
 
             IsInitialized = true;

@@ -5,13 +5,17 @@ using FLB_API.Managers;
 
 using Microsoft.AspNetCore.Mvc;
 
+using NetCord;
+
 namespace FLB_API.Controllers
 {
     [ApiController]
     [Route("thumbnail/{modId}")]
     public class ThumbnailController : ControllerBase
     {
-        private static Dictionary<string, string> Vanilla { get; } = new()
+#pragma warning disable S1192
+
+        public static Dictionary<string, string> Vanilla { get; } = new()
         {
             // Avatars
             ["fa534c5a83ee4ec6bd641fec424c4142.Avatar.Heavy"] = "Heavy",
@@ -68,6 +72,8 @@ namespace FLB_API.Controllers
             ["fa534c5a83ee4ec6bd641fec424c4142.Level.SceneparkourDistrictLogic"] = "Neon District Parkour",
         };
 
+#pragma warning restore S1192
+
         [HttpGet(Name = "GetThumbnail")]
         [Tags("Thumbnail")]
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
@@ -81,10 +87,10 @@ namespace FLB_API.Controllers
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
             if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
-                return Problem("modId is required.", title: "Missing Mod ID", statusCode: 400);
+                return Problem("modId is required.", statusCode: 400, title: "Missing Mod ID");
 
             if (!long.TryParse(modId, out var modIdNum) && string.IsNullOrWhiteSpace(barcode))
-                return Problem("modId is not valid.", title: "Invalid Mod ID", statusCode: 400);
+                return Problem("modId is not valid.", statusCode: 400, title: "Invalid Mod ID");
 
             MemoryThumbnail? thumbnail;
             if (modIdNum != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
@@ -93,12 +99,12 @@ namespace FLB_API.Controllers
                 {
                     thumbnail = await ThumbnailManager.GetModThumbnail(modIdNum, barcode);
                     if (thumbnail == null)
-                        return Problem("Thumbnail not found.", title: "Not Found", statusCode: 404);
+                        return Problem("Thumbnail not found.", statusCode: 404, title: "Not Found");
                 }
                 catch (Exception ex)
                 {
                     Program.Logger?.Error(ex, "Error fetching thumbnail for {0}", modId);
-                    return Problem("An error occurred while fetching the thumbnail", title: "Server Exception", statusCode: 500);
+                    return Problem("An error occurred while fetching the thumbnail", statusCode: 500, title: "Server Exception");
                 }
             }
             else
@@ -107,22 +113,23 @@ namespace FLB_API.Controllers
                 if (!System.IO.File.Exists(file))
                 {
                     Program.Logger?.Error("The directory/file for the vanilla thumbnail was not found! Barcode: {0} ... File Name: {1}.webp", barcode, fileName);
-                    return Problem("Thumbnail not found. (Vanilla thumbnail missing)", title: "Invalid Barcode", statusCode: 404);
+                    return Problem("Thumbnail not found. (Vanilla thumbnail missing)", statusCode: 404, title: "Invalid Barcode");
                 }
 
                 thumbnail = new MemoryThumbnail(-1, await System.IO.File.ReadAllBytesAsync(file), null);
             }
 
-            Response.Headers.AccessControlExposeHeaders = [with(["ModIO-Maturity", "Server-Uptime"])];
-            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
-            Response.Headers.Append("ModIO-Maturity", thumbnail.IsNsfw ? "nsfw" : "safe");
+            Response.Headers.AccessControlExposeHeaders = [with(["ModIO-Maturity"])];
+            Response.Headers.Append("ModIO-Maturity", MaturityHeader(thumbnail.IsNsfw));
 
             var name = $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png";
             if (thumbnail.Image != null)
                 return File(thumbnail.Image, "image/png", name);
 
             Program.Logger?.Error("The thumbnail for {0} was null.", modId);
-            return Problem("An error occurred while fetching the thumbnail", title: "Server Exception", statusCode: 500);
+            return Problem("An error occurred while fetching the thumbnail", statusCode: 500, title: "Server Exception");
         }
+
+        private static string MaturityHeader(bool isNsfw) => isNsfw ? "nsfw" : "safe";
     }
 }

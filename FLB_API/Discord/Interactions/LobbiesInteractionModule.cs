@@ -21,7 +21,7 @@ namespace FLB_API.Discord.Interactions
         [ComponentInteraction("button_next")]
         public async Task<InteractionMessageProperties> NextPage(int platform, int page, int pages)
         {
-            var platformEnum = (Platform)platform;
+            var platformEnum = (PlatformType)platform;
             if (page == pages)
                 return DiscordBotManager.Error(NO_MORE_PAGES);
             page++;
@@ -32,7 +32,7 @@ namespace FLB_API.Discord.Interactions
         [ComponentInteraction("button_previous")]
         public async Task<InteractionMessageProperties> PreviousPage(int platform, int page)
         {
-            var platformEnum = (Platform)platform;
+            var platformEnum = (PlatformType)platform;
             if (page == 1)
                 return DiscordBotManager.Error(NO_MORE_PAGES);
             page--;
@@ -43,7 +43,7 @@ namespace FLB_API.Discord.Interactions
         [ComponentInteraction("button_currentPage")]
         public async Task<InteractionMessageProperties> PreviousPage(int platform)
         {
-            var platformEnum = (Platform)platform;
+            var platformEnum = (PlatformType)platform;
             await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, 1).Components);
             return new InteractionMessageProperties().WithContent(string.Format(RETURN_MSG, 1)).WithFlags(MessageFlags.Ephemeral);
         }
@@ -51,7 +51,7 @@ namespace FLB_API.Discord.Interactions
         [ComponentInteraction("button_refresh")]
         public async Task<InteractionMessageProperties> Refresh(int platform, int page)
         {
-            var platformEnum = (Platform)platform;
+            var platformEnum = (PlatformType)platform;
             await Context.Message.ModifyAsync(x => x.Components = LobbiesCommandModule.Internal_Check(platformEnum, page).Components);
             return new InteractionMessageProperties().WithContent("Refreshed!").WithFlags(MessageFlags.Ephemeral);
         }

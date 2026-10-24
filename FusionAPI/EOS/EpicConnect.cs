@@ -21,7 +21,7 @@ internal class EpicConnect : EpicInterface
         ConnectInterface = connectInterface;
     }
 
-    internal override async Task<bool> InitializeAsync(ILogger logger, ThreadDispatcher dispatcher)
+    internal override async Task<bool> InitializeAsync(ILogger? logger, ThreadDispatcher dispatcher)
     {
         Logger = logger;
         var loginSuccess = await LoginAsync();

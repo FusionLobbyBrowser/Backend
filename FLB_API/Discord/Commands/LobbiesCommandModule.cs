@@ -13,8 +13,6 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
-using Platform = FLB_API.Controllers.LobbyListController.Platform;
-
 namespace FLB_API.Discord.Commands
 {
     [SlashCommand("lobbies", "Lobbies command")]
@@ -24,10 +22,10 @@ namespace FLB_API.Discord.Commands
 
         [SubSlashCommand("check", "Check the currently available lobbies in LabFusion!")]
         public static InteractionMessageProperties Check(
-            [SlashCommandParameter(Name = "platform", Description = "What platform to display the lobbies from")] Platform platform)
+            [SlashCommandParameter(Name = "platform", Description = "What platform to display the lobbies from")] PlatformType platform)
             => Internal_Check(platform, 1);
 
-        internal static InteractionMessageProperties Internal_Check(Platform platform, int page = 1)
+        internal static InteractionMessageProperties Internal_Check(PlatformType platform, int page = 1)
         {
             var error = GetLobbies(out var list, platform);
             if (error != null)
@@ -69,7 +67,7 @@ namespace FLB_API.Discord.Commands
                     $"""
                      {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
 
-                     **{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
+                     **{GetEmoji(CustomEmoji.IdBadge)} ID:** {l.LobbyID}
                      **{GetEmoji(CustomEmoji.User)} Host:** {host}
                      **{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
                      **{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
@@ -159,7 +157,7 @@ namespace FLB_API.Discord.Commands
             var details =
                 $"""
                  {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}
-                 **{GetEmoji(CustomEmoji.IDBadge)} ID:** {l.LobbyID}
+                 **{GetEmoji(CustomEmoji.IdBadge)} ID:** {l.LobbyID}
                  **{GetEmoji(CustomEmoji.User)} Host:** {host}
                  **{GetEmoji(CustomEmoji.Map)} Level:** {(l.LevelModID != -1 ? $"[{RemoveUnityRichText(l.LevelTitle ?? "N/A")}](https://mod.io/search/mods/{l.LevelModID})" : $"{RemoveUnityRichText(l.LevelTitle ?? "N/A")}")}
                  **{GetEmoji(CustomEmoji.PuzzlePiece)} Gamemode:** {(string.IsNullOrWhiteSpace(gamemode) ? "Sandbox" : gamemode)}
@@ -211,7 +209,7 @@ namespace FLB_API.Discord.Commands
             var thumbnail = GetThumbnailUrl(p.AvatarModID,
                     p.AvatarModID == -1 && ThumbnailController.Vanilla.ContainsKey(p.AvatarTitle ?? "N/A") ? p.AvatarTitle : string.Empty);
 
-            var result = Uri.TryCreate(thumbnail, UriKind.Absolute, out Uri? uriResult)
+            var result = Uri.TryCreate(thumbnail, UriKind.Absolute, out var uriResult)
                          && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
 
             var section = new ComponentSectionProperties(
@@ -223,8 +221,8 @@ namespace FLB_API.Discord.Commands
                 $"""
                  ## {name}
                  {(string.IsNullOrWhiteSpace(d) ? string.Empty : d)}{(string.IsNullOrWhiteSpace(nickname) ? string.Empty : $"\n**{GetEmoji(CustomEmoji.CircleUser)} Nickname:** {nickname}")}
-                 **{GetEmoji(CustomEmoji.IDBadge)} Username:** {username}
-                 **{GetEmoji(CustomEmoji.IDCard)} ID:** {p.PlatformID}
+                 **{GetEmoji(CustomEmoji.IdBadge)} Username:** {username}
+                 **{GetEmoji(CustomEmoji.IdCard)} ID:** {p.PlatformID}
                  **{GetEmoji(CustomEmoji.UserAvatar)} Avatar:** {avatar}{(l.LobbyPlatform == "Steam" ? $"\n**{GetEmoji(CustomEmoji.Steam)} Steam Profile:** [View](https://steamcommunity.com/profiles/{p.PlatformID})" : string.Empty)}
                  """;
             var detailsProp = new TextDisplayProperties(details);
@@ -245,29 +243,31 @@ namespace FLB_API.Discord.Commands
         public static string ToBrokenBase64(string text)
             => Convert.ToBase64String(Encoding.UTF8.GetBytes(text)).ReplaceRegex(@"\+", "-").ReplaceRegex(@"\/", "_").ReplaceRegex(@"\=+$", "");
 
-        public static InteractionMessageProperties? GetLobbies(out LobbyListResponse? lobbies, Platform platform = Platform.All)
+        public static InteractionMessageProperties? GetLobbies(out LobbyListResponse? lobbies, PlatformType platform = PlatformType.All)
         {
             lobbies = null;
-            if (platform != Platform.All)
+
+            LobbyListResponse? list = null;
+            if (platform != PlatformType.All)
             {
-                var handler = platform == Platform.Steam ? Program.SteamClient : Program.EpicClient;
-                if (handler?.Handler.IsInitialized != true)
+                var handler = Program.Platforms.FirstOrDefault(x => x.Type == platform);
+                if (handler?.Client?.Handler.IsInitialized != true)
+                {
                     return DiscordBotManager.Error($"Server is not connected to {Enum.GetName(platform)}.");
+                }
+
+                list = handler?.Lobbies;
             }
             else
             {
-                if (Program.SteamClient?.Handler.IsInitialized != true)
-                    return DiscordBotManager.Error("Server is not connected to Steam.");
-                else if (Program.EpicClient?.Handler.IsInitialized != true)
-                    return DiscordBotManager.Error("Server is not connected to Epic.");
-            }
+                if (Program.Platforms.All(x => x.Client?.Handler.IsInitialized != true))
+                {
+                    return DiscordBotManager.Error(
+                        $"Server is not connected to any of the available platforms ({string.Join(", ", Program.Platforms.Select(x => Enum.GetName(x.Type)))}).");
+                }
 
-            LobbyListResponse? list = platform switch
-            {
-                Platform.Steam => Program.SteamLobbies,
-                Platform.Epic => Program.EpicLobbies,
-                _ => Program.Lobbies
-            };
+                list = Program.Lobbies;
+            }
 
             if (string.IsNullOrWhiteSpace(list?.Json))
                 return DiscordBotManager.Error("The server did not fetch lobbies yet");
@@ -308,11 +308,11 @@ namespace FLB_API.Discord.Commands
             Link = 1522004581687623740,
             Play = 1522237377551269969,
             Info = 1522238640166670507,
-            IDCard = 1522662343270596809,
+            IdCard = 1522662343270596809,
             CircleUser = 1522662344856174602,
             Book = 1522662345745236019,
             UserAvatar = 1522662347355848734,
-            IDBadge = 1522663008252465274,
+            IdBadge = 1522663008252465274,
             XMark = 1524101018814779442,
         }
 
@@ -322,7 +322,7 @@ namespace FLB_API.Discord.Commands
 
     public class InfoAutoComplete : IAutocompleteProvider<AutocompleteInteractionContext>
     {
-        public virtual Platform Platform { get; } = Platform.All;
+        public virtual PlatformType Platform { get; } = PlatformType.All;
 
         public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(ApplicationCommandInteractionDataOption option, AutocompleteInteractionContext context)
         {
@@ -333,7 +333,7 @@ namespace FLB_API.Discord.Commands
                 return new ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?>([]);
 
             var lobbies = new List<LobbyInfo>(Program.Lobbies?.Lobbies!)?.OrderByDescending(x => x.PlayerCount).ToList() ?? [];
-            if (Platform != Platform.All)
+            if (Platform != PlatformType.All)
                 lobbies = [.. lobbies.Where(x => x.LobbyPlatform == Enum.GetName(Platform))];
 
             if (!string.IsNullOrWhiteSpace(input))
@@ -378,12 +378,12 @@ namespace FLB_API.Discord.Commands
 
     public class SteamInfoAutoComplete : InfoAutoComplete
     {
-        public override Platform Platform => Platform.Steam;
+        public override PlatformType Platform => PlatformType.Steam;
     }
 
     public class EpicInfoAutoComplete : InfoAutoComplete
     {
-        public override Platform Platform => Platform.Epic;
+        public override PlatformType Platform => PlatformType.Epic;
     }
 
     [method: JsonConstructor]

@@ -2,7 +2,6 @@
 using System.ComponentModel.DataAnnotations;
 
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 
 namespace FLB_API.Controllers.Steam
 {
@@ -23,14 +22,14 @@ namespace FLB_API.Controllers.Steam
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the avatar of")][Required] string steamId)
         {
             if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Problem("Backend is not set up for using Steam API!", title: "Not Set Up", statusCode: 500);
+                return Problem("Backend is not set up for using Steam API!", statusCode: 500, title: "Not Set Up");
 
             if (!ulong.TryParse(steamId, out var id))
-                return Problem("Invalid Steam ID was provided, must be a number!", title: "Invalid ID", statusCode: 400);
+                return Problem("Invalid Steam ID was provided, must be a number!", statusCode: 400, title: "Invalid ID");
 
             var profile = await ProfileController.GetProfile(id);
             if (profile?.Profile == null || profile?.ProfileJson == null)
-                return Problem("Steam API returned no profile for such ID!", title: "No Profile", statusCode: 400);
+                return Problem("Steam API returned no profile for such ID!", statusCode: 400, title: "No Profile");
 
             var image = await HttpClient.GetByteArrayAsync(profile.Profile.AvatarFullUrl);
             return File(image, "image/png");

@@ -23,7 +23,7 @@ namespace FLB_API.Discord
 
         public static async Task Setup()
         {
-            Logger = new Logger("DISCORD");
+            Logger = new Logger("Discord");
             if (string.IsNullOrWhiteSpace(Program.Settings?.DiscordBotToken))
             {
                 Logger.Error("The discord bot token cannot be empty!");

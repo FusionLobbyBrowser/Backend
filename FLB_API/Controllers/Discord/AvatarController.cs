@@ -24,7 +24,7 @@ namespace FLB_API.Controllers.Discord
             [FromQuery(Name = "animated")][Description("Whether the icon should be returned in an animated format if possible")][DefaultValue(true)] bool animated = true)
         {
             if (!ulong.TryParse(guildId, out var id))
-                return Problem("Invalid Guild ID was provided, must be a number!", title: "Invalid ID", statusCode: 400);
+                return Problem("Invalid Guild ID was provided, must be a number!", statusCode: 400, title: "Invalid ID");
 
             var url = CdnUrl(id, Path.GetFileName(iconHash), size, animated);
 
@@ -36,7 +36,7 @@ namespace FLB_API.Controllers.Discord
             catch (Exception ex)
             {
                 Program.Logger?.Error(ex, "Failed to retrieve the icon for " + guildId.Replace(Environment.NewLine, "") + " guild.");
-                return Problem("No icon was found for the specified guild and icon hash.", title: "Icon Not Found", statusCode: 404);
+                return Problem("No icon was found for the specified guild and icon hash.", statusCode: 404, title: "Icon Not Found");
             }
 
             return File(image, "image/webp");

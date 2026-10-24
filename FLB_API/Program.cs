@@ -2,20 +2,16 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using System.Threading.RateLimiting;
 
 using FLB_API.Blacklist;
 using FLB_API.Discord;
 using FLB_API.Managers;
 
 using FusionAPI;
-using FusionAPI.Data.Containers;
-using FusionAPI.Data.Interfaces;
 using FusionAPI.Handlers;
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 
 using Serilog;
@@ -29,21 +25,13 @@ namespace FLB_API
 {
     public static class Program
     {
-        public static Fusion? SteamClient { get; private set; }
-
-        public static Fusion? EpicClient { get; private set; }
-
         internal static Serilog.Core.Logger? Logger { get; private set; }
-
-        internal static Logger? SteamLogger { get; private set; }
-
-        internal static LobbyListResponse? SteamLobbies { get; private set; }
-
-        internal static LobbyListResponse? EpicLobbies { get; private set; }
 
         internal static LobbyListResponse? Lobbies { get; private set; }
 
         internal static LobbyListResponse? FriendsOnlyLobbies { get; private set; }
+
+        internal static List<Platform> Platforms { get; } = [];
 
         internal static DateTime Uptime { get; private set; }
 
@@ -72,8 +60,6 @@ namespace FLB_API
                 Password = ""
             }
         };
-
-        internal static List<IMatchmakingHandler> Handlers { get; } = [];
 
         public static async Task Main(string[] args)
         {
@@ -119,28 +105,26 @@ namespace FLB_API
 
                 Dictionary<string, string> metadata = [];
 
+                Fusion steamClient;
                 if (choice.StartsWith("SteamKit"))
                 {
-                    SteamClient = new Fusion(new SteamKitHandler());
-                    metadata = await SetupSteamKit();
+                    steamClient = new Fusion(new SteamKitHandler());
+                    metadata = await SetupSteamKit(steamClient);
                 }
                 else
                 {
                     Logger?.Information("Connecting with Steamworks");
-                    SteamClient = new Fusion(new SteamworksHandler());
+                    steamClient = new Fusion(new SteamworksHandler());
                 }
-                Handlers.Add(SteamClient.Handler);
 
-                SteamLogger = new Logger(level, "Steam");
-                await SteamClient.Initialize(SteamLogger, metadata);
+                Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, metadata));
                 Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
-                EpicClient = new Fusion(new EpicHandler());
-                var eosLogger = new Logger(level, "EOS");
-                await EpicClient.Initialize(eosLogger, []);
+
+                Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
                 Logger?.Information("Successfully initialized EOS API");
-                Handlers.Add(EpicClient.Handler);
+
                 Uptime = DateTime.UtcNow;
-                Blacklist = new BlacklistManager(new Logger(level, "BLACKLIST"));
+                Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
                 await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
             }
             catch (Exception e)
@@ -243,13 +227,13 @@ namespace FLB_API
         public static string ReplaceRegex(this string text, string pattern, string replacement)
             => Regex.Replace(text, pattern, replacement);
 
-        private static async Task<Dictionary<string, string>> SetupSteamKit()
+        private static async Task<Dictionary<string, string>> SetupSteamKit(Fusion? client)
         {
             Dictionary<string, string> metadata = [];
             Logger?.Information("Connecting with SteamKit");
-            if (SteamClient == null)
+            if (client == null)
                 return [];
-            ((SteamKitHandler)SteamClient.Handler).Authenticator = new CustomUserAuth(
+            ((SteamKitHandler)client.Handler).Authenticator = new CustomUserAuth(
                 () =>
                 {
                     AuthCancel?.Cancel();
@@ -264,7 +248,7 @@ namespace FLB_API
                     AuthCancel = new CancellationTokenSource();
                     return await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow] > Enter the code from your authenticator: [/]"), AuthCancel.Token);
                 },
-                GetCodeFromEmail
+                async (email, _) => await GetCodeFromEmail(client.Handler.Logger, email)
                 );
             if (string.IsNullOrWhiteSpace(Settings?.Authentication?.Username) || string.IsNullOrWhiteSpace(Settings?.Authentication?.Password))
             {
@@ -338,56 +322,27 @@ namespace FLB_API
             LoadSettings();
             while (!token.IsCancellationRequested)
             {
-                if (SteamClient is { Handler.IsInitialized: true })
+                if (Platforms.Any(x => x?.Client?.Handler?.IsInitialized == true))
                 {
                     try
                     {
                         List<CustomLobbyInfo> friendsOnly = [];
-                        var steamTask = Task.Run(async () =>
-                        {
-                            if (SteamClient.Handler?.IsInitialized == true)
-                            {
-                                SteamLobbies = await CreateResponse(await SteamClient.FetchLobbies("Steam") ?? [],
-                                    SteamClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                                friendsOnly = (await SteamClient.FetchLobbies("Steam", true)).ToList() ?? [];
-                            }
-                            else
-                            {
-                                Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
-                            }
-                        }, token);
+                        List<Task<CustomLobbyInfo[]>> platforms = [];
+                        Platforms.ForEach(x => platforms.Add(x.FetchLobbies()));
 
-                        var epicTask = Task.Run(async () =>
-                        {
-                            if (EpicClient is { Handler.IsInitialized: true })
-                            {
-                                EpicLobbies = await CreateResponse(await EpicClient.FetchLobbies("EOS") ?? [],
-                                    EpicClient.Handler.LastFetch, Settings?.Interval ?? 30);
-                            }
-                            else
-                            {
-                                Logger?.Warning("EOS Client is not initialized, skipping lobby fetch...");
-                            }
-                        }, token);
+                        await Task.WhenAll(platforms);
 
-                        await Task.WhenAll(steamTask, epicTask);
+                        foreach (var lobbies in from platform in platforms where platform.IsCompletedSuccessfully select platform.Result)
+                            friendsOnly.AddRange(lobbies);
 
-                        FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], SteamClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
-                        Lobbies = await CreateResponse((SteamLobbies?.Lobbies ?? []).Concat(EpicLobbies?.Lobbies ?? []).ToArray<LobbyInfo>() ?? [], EpicClient?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        List<CustomLobbyInfo> allLobbies = [];
+                        Platforms.ForEach(x => allLobbies.AddRange(x.Lobbies?.Lobbies ?? []));
+
+                        FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], Platforms[0]?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        Lobbies = await CreateResponse([.. allLobbies], Platforms[0]?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
 
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
-                        if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
-                        {
-                            await DiscordBotManager.Status();
-                        }
-                        else
-                        {
-                            if (Settings?.Preferences?.LaunchDiscordBot == true)
-                            {
-                                Logger?.Information("Setting up discord bot");
-                                _ = DiscordBotManager.Setup();
-                            }
-                        }
+                        await HandleDiscordBot();
                         LoadSettings();
                     }
                     catch (Exception e)
@@ -403,13 +358,29 @@ namespace FLB_API
             }
         }
 
-        public static async Task<LobbyListResponse> CreateResponse(LobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
+        private static async Task HandleDiscordBot()
+        {
+            if (DiscordBotManager.Client != null && DiscordBotManager.Client.Status == NetCord.Gateway.WebSocketStatus.Ready)
+            {
+                await DiscordBotManager.Status();
+            }
+            else
+            {
+                if (Settings?.Preferences?.LaunchDiscordBot == true)
+                {
+                    Logger?.Information("Setting up discord bot");
+                    _ = DiscordBotManager.Setup();
+                }
+            }
+        }
+
+        public static async Task<LobbyListResponse> CreateResponse(CustomLobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
         {
             var converted = await lobbies.Select(x => x.Convert()).Where(async x => Blacklist == null || await Blacklist.IsAllowed(x));
             return new LobbyListResponse([.. converted], date, interval, friends ?? []);
         }
 
-        private static async Task<IEnumerable<T>> Where<T>(this IEnumerable<T> source, Func<T, Task<bool>> predicate)
+        public static async Task<IEnumerable<T>> Where<T>(this IEnumerable<T> source, Func<T, Task<bool>> predicate)
         {
             var results = new ConcurrentQueue<T>();
             var tasks = source.Select(
@@ -422,40 +393,14 @@ namespace FLB_API
             return results;
         }
 
-        private static async Task<CustomLobbyInfo[]> FetchLobbies(this Fusion? client, string name, bool friendsOnly = false)
-        {
-            if (client == null)
-                return [];
-
-            Logger?.Information($"Fetching {name} lobbies... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
-            LobbyInfo[] lobbies;
-            try
-            {
-                if (!friendsOnly)
-                    lobbies = await client.GetLobbies();
-                else
-                    lobbies = await client.GetLobbies(publicLobbies: false, friendsOnlyLobbies: true);
-            }
-            catch (Exception e)
-            {
-                Logger?.Error(e, $"Failed to fetch lobbies from {name} {(friendsOnly ? "(Friends Only)" : "(Public)")}");
-                return [];
-            }
-
-            var filtered = await lobbies.Select(x => x.Convert()).Where(async x => Blacklist == null || await Blacklist.IsAllowed(x));
-            Logger?.Information($"Successfully fetched {name} lobbies ({filtered.Count()} -> {lobbies.Length - filtered.Count()} filtered out)... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
-
-            return [.. filtered];
-        }
-
-        private static async Task<string> GetCodeFromEmail(string email, bool previousCodeWasIncorrect)
+        private static async Task<string> GetCodeFromEmail(ILogger? logger, string email)
         {
             if (AuthCancel != null)
                 await AuthCancel.CancelAsync();
 
             if (ImapEmpty())
             {
-                SteamLogger?.Warning("Empty IMAP Configuration, falling back to manual input...");
+                logger?.Warning("Empty IMAP Configuration, falling back to manual input...");
                 AuthCancel = new CancellationTokenSource();
                 return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
             }
@@ -463,29 +408,29 @@ namespace FLB_API
             {
                 try
                 {
-                    SteamLogger?.Info("Using IMAP to fetch Steam Auth Code...");
+                    logger?.Info("Using IMAP to fetch Steam Auth Code...");
                     await Task.Delay((int)3.5f * 1000);
                     ImapManager ??= new IMAPManager(
                         Settings!.Imap!.Host!,
                         Settings.Imap.Port,
-                        SteamLogger
+                        logger
                         );
 
                     ImapManager.LogIn(Settings!.Imap!.Username!, Settings!.Imap!.Password!);
                     var code = await ImapManager.GetCodeAsync();
                     if (string.IsNullOrWhiteSpace(code))
                     {
-                        SteamLogger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
+                        logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
                         AuthCancel = new CancellationTokenSource();
                         return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                     }
-                    SteamLogger?.Info("Successfully retrieved Steam Auth Code from email");
+                    logger?.Info("Successfully retrieved Steam Auth Code from email");
                     return code;
                 }
                 catch (Exception ex)
                 {
-                    SteamLogger?.Error("Failed to retrieve the code from email", ex);
-                    SteamLogger?.Info("Falling back to manual input...");
+                    logger?.Error("Failed to retrieve the code from email", ex);
+                    logger?.Info("Falling back to manual input...");
                     AuthCancel = new CancellationTokenSource();
                     return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
                 }
@@ -534,15 +479,5 @@ namespace FLB_API
                 ContentType = contentType
             };
         }
-    }
-
-    [JsonSourceGenerationOptions(WriteIndented = true)]
-    public class ErrorResponse(int code, string message)
-    {
-        [JsonPropertyName("code")]
-        public int Code { get; set; } = code;
-
-        [JsonPropertyName("message")]
-        public string Message { get; set; } = message;
     }
 }

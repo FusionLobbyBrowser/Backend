@@ -12,9 +12,9 @@ namespace FusionAPI
 
         public Dictionary<string, UptimeData> LobbiesUptime { get; private set; } = [];
 
-        public async Task Initialize(ILogger logger, Dictionary<string, string> metadata)
+        public async Task Initialize(ILogger? logger, Dictionary<string, string>? metadata)
         {
-            await Handler.Init(logger, metadata);
+            await Handler.Init(logger, metadata ?? []);
         }
 
         public async Task<LobbyInfo[]> GetLobbies(bool includeFull = true, bool publicLobbies = true, bool friendsOnlyLobbies = false)

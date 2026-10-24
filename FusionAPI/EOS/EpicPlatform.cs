@@ -24,7 +24,7 @@ internal class EpicPlatform : EpicInterface
     internal PlatformInterface? PlatformInterface;
     internal ILogger? Logger;
 
-    internal override Task<bool> InitializeAsync(ILogger logger, ThreadDispatcher dispatcher)
+    internal override Task<bool> InitializeAsync(ILogger? logger, ThreadDispatcher dispatcher)
     {
         try
         {

@@ -37,7 +37,7 @@ namespace FLB_API.Controllers.Steam
         {
             var profile = await User.GetSteamProfile();
             if (profile?.Profile == null || profile?.ProfileJson == null)
-                return Problem("Steam API returned no profile for such ID!", title: "No Profile", statusCode: 400);
+                return Problem("Steam API returned no profile for such ID!", statusCode: 400, title: "No Profile");
 
             return Program.CreateResult(profile.ProfileJson, contentType: "application/json");
         }

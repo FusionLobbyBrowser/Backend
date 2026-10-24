@@ -15,9 +15,6 @@ namespace FLB_API.Controllers
         [Produces("text/plain")]
         public IActionResult Get()
         {
-            Response.Headers.AccessControlExposeHeaders = new Microsoft.Extensions.Primitives.StringValues("Server-Uptime");
-            Response.Headers.Append("Server-Uptime", ((DateTimeOffset)Program.Uptime).ToUnixTimeSeconds().ToString());
-
             return Program.CreateResult("OK");
         }
     }

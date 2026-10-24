@@ -11,7 +11,7 @@ namespace FusionAPI.Handlers
     {
         public bool IsInitialized => SteamClient.IsValid;
 
-        private ILogger? Logger { get; set; }
+        public ILogger? Logger { get; private set; }
 
         public DateTimeOffset LastFetch { get; private set; } = DateTimeOffset.UtcNow;
 
@@ -52,7 +52,7 @@ namespace FusionAPI.Handlers
             return await list.RequestAsync();
         }
 
-        public Task Init(ILogger logger, Dictionary<string, string> metadata)
+        public Task Init(ILogger? logger, Dictionary<string, string> metadata)
         {
             Logger = logger;
 #pragma warning disable IDE0079 // Remove unnecessary suppression, yeah sure this is absolutely fucking unnecessary, not like you're screaming at me for having something I cannot fix
