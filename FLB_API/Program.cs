@@ -151,12 +151,26 @@ namespace FLB_API
                     options.LoginPath = "/steam/login";
                     options.LogoutPath = "/steam/logout";
 
-                    options.Events.OnRedirectToLogin = context =>
+                    options.Events.OnRedirectToLogin = async context =>
                     {
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return Task.CompletedTask;
+                        context.Response.ContentType = "application/problem+json";
+                        var details = new ProblemDetails()
+                        {
+                            Type = "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+                            Detail = "You are not authorized to access this endpoint.",
+                            Title = "Not Authorized",
+                            Status = StatusCodes.Status401Unauthorized,
+                            Instance = $"{context.HttpContext.Request.Method} {context.HttpContext.Request.Path}",
+                            Extensions = new Dictionary<string, object?>(){
+                                { "traceId", context.HttpContext.TraceIdentifier },
+                                { "timestamp", DateTime.UtcNow },
+                            }
+                        };
+                        await context.Response.WriteAsJsonAsync(details);
                     };
                 })
+
                 .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
 
             builder.Services.AddControllers().AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -175,6 +189,8 @@ namespace FLB_API
             {
                 options.CustomizeProblemDetails = ctx =>
                 {
+                    if (ctx.ProblemDetails.Status == 404)
+                        ctx.ProblemDetails.Detail = "This endpoint does not exist.";
                     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
                     ctx.ProblemDetails.Extensions["timestamp"] = DateTime.UtcNow;
                     ctx.ProblemDetails.Instance = $"{ctx.HttpContext.Request.Method} {ctx.HttpContext.Request.Path}";
