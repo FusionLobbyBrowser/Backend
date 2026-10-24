@@ -28,6 +28,9 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v7
 
+      - name: Create sixlabors.lic file
+        run: echo "${{ secrets.SIXLABORS_LICENSE }}" > ./FLB_API/sixlabors.lic
+
       - name: "Setup NuGet"
         uses: nuget/setup-nuget@v4
         
@@ -59,7 +62,9 @@ jobs:
             const fs = require('fs')
 
             var args = process.argv.slice(2);
-            var sarif = JSON.parse(fs.readFileSync(args[0], "utf8"));
+            var content = fs.readFileSync(args[0], "utf8");
+            console.log(content);
+            var sarif = JSON.parse(content);
 
             for (run of sarif.runs) {
               run.tool.driver.name = "SecurityCodeScan";
