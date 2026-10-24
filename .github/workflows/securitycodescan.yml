@@ -34,23 +34,24 @@ jobs:
       - name: "Setup MSBuild"
         uses: microsoft/setup-msbuild@v3
 
-      - uses: actions/setup-dotnet@v6
+      - name: "Setup DotNet"
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '3.1.x'
 
-      - name: Set up projects for analysis
+      - name: Setup projects for analysis
         uses: security-code-scan/security-code-scan-add-action@v1
 
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
+      - name: Build project
         run: dotnet build --no-restore
 
-      - name: Convert sarif
+      - name: Convert SARIF
         shell: bash
         run: |
-          dotnet tool install --global Sarif.Multitool --version 5.7.0
+          dotnet tool install --global Sarif.Multitool --version 5.8.0
           outputDir="../results"
           mkdir $outputDir
           
@@ -112,7 +113,7 @@ jobs:
           done
           sarif merge $outputDir/*.sarif --recurse true --output-directory=$outputDir --output-file=result.sarif
 
-      - name: Upload sarif
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "../results/result.sarif"
