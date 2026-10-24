@@ -28,29 +28,33 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v7
 
+      - name: Create sixlabors.lic file
+        run: echo "${{ secrets.SIXLABORS_LICENSE }}" > ./FLB_API/sixlabors.lic
+
       - name: "Setup NuGet"
         uses: nuget/setup-nuget@v4
         
       - name: "Setup MSBuild"
         uses: microsoft/setup-msbuild@v3
 
-      - uses: actions/setup-dotnet@v6
+      - name: "Setup DotNet"
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '3.1.x'
 
-      - name: Set up projects for analysis
+      - name: Setup projects for analysis
         uses: security-code-scan/security-code-scan-add-action@v1
 
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
+      - name: Build project
         run: dotnet build --no-restore
 
-      - name: Convert sarif
+      - name: Convert SARIF
         shell: bash
         run: |
-          dotnet tool install --global Sarif.Multitool --version 5.7.0
+          dotnet tool install --global Sarif.Multitool --version 5.8.0
           outputDir="../results"
           mkdir $outputDir
           
@@ -58,7 +62,9 @@ jobs:
             const fs = require('fs')
 
             var args = process.argv.slice(2);
-            var sarif = JSON.parse(fs.readFileSync(args[0], "utf8"));
+            var content = fs.readFileSync(args[0], "utf8");
+            console.log(content);
+            var sarif = JSON.parse(content);
 
             for (run of sarif.runs) {
               run.tool.driver.name = "SecurityCodeScan";
@@ -66,7 +72,7 @@ jobs:
               run.tool.driver.informationUri  = "https://security-code-scan.github.io";
 
               run.results = run.results.filter((e => e.ruleId.startsWith("SCS")));
-              run.tool.driver.rules = run.tool.driver.rules.filter((e => e.id.startsWith("SCS")));
+              if(run.tool.driver.rules) run.tool.driver.rules = run.tool.driver.rules.filter((e => e.id.startsWith("SCS")));
 
               for (let i = 0; i < run.results.length; ++i) {
                 run.results[i].ruleIndex = undefined;
@@ -91,9 +97,11 @@ jobs:
                 }
               }
 
-              for (rule of run.tool.driver.rules) {
-                rule.shortDescription = undefined;
-                rule.help = { "text" : rule.helpUri};
+              if(run.tool.driver.rules) {
+                for (rule of run.tool.driver.rules) {
+                  rule.shortDescription = undefined;
+                  rule.help = { "text" : rule.helpUri};
+                }
               }
 
               run.language = undefined;
@@ -112,7 +120,7 @@ jobs:
           done
           sarif merge $outputDir/*.sarif --recurse true --output-directory=$outputDir --output-file=result.sarif
 
-      - name: Upload sarif
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "../results/result.sarif"
