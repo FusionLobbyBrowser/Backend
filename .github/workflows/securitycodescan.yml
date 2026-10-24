@@ -97,9 +97,11 @@ jobs:
                 }
               }
 
-              for (rule of run.tool.driver.rules) {
-                rule.shortDescription = undefined;
-                rule.help = { "text" : rule.helpUri};
+              if(run.tool.driver.rules) {
+                for (rule of run.tool.driver.rules) {
+                  rule.shortDescription = undefined;
+                  rule.help = { "text" : rule.helpUri};
+                }
               }
 
               run.language = undefined;
