@@ -189,7 +189,7 @@ namespace FLB_API
             {
                 options.CustomizeProblemDetails = ctx =>
                 {
-                    if (ctx.ProblemDetails.Status == 404)
+                    if (ctx.ProblemDetails.Status == 404 && string.IsNullOrWhiteSpace(ctx.ProblemDetails.Detail) && ctx.ProblemDetails.Title == "Not Found")
                         ctx.ProblemDetails.Detail = "This endpoint does not exist.";
                     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
                     ctx.ProblemDetails.Extensions["timestamp"] = DateTime.UtcNow;
