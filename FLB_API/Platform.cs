@@ -17,6 +17,10 @@ namespace FLB_API
 
         public Fusion? Client { get; set; }
 
+        public bool? AutoReInit { get; set; } = true;
+
+        private Dictionary<string, string>? _metadata;
+
         public LobbyListResponse? Lobbies { get; set; }
 
         public Platform(Fusion client, ILogger? logger, PlatformType type)
@@ -35,6 +39,8 @@ namespace FLB_API
 
         public async Task Init(Dictionary<string, string>? metadata = null)
         {
+            _metadata = metadata;
+
             if (Client != null)
                 await Client.Initialize(Logger, metadata);
         }
@@ -56,7 +62,26 @@ namespace FLB_API
             }
             else
             {
-                Logger?.Warning("Steam Client is not initialized, skipping lobby fetch...");
+                if (AutoReInit != true || Client?.Handler == null)
+                {
+                    Logger?.Warning("Client is not initialized, skipping lobby fetch");
+                }
+                else if (Client?.Handler != null)
+                {
+                    Logger?.Warning("Client is not initialized, attempting to re-initialize...");
+                    await Client.Handler.DeInit();
+                    await Client.Initialize(Logger, _metadata);
+                    if (Client?.Handler?.IsInitialized == true)
+                    {
+                        Logger?.Info("Client re-initialized successfully.");
+                        return await FetchLobbies();
+                    }
+                    else
+                    {
+                        Logger?.Error("Failed to re-initialize client, skipping lobby fetch");
+                        return [];
+                    }
+                }
             }
 
             return [];
