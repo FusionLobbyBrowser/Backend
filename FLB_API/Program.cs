@@ -354,8 +354,10 @@ namespace FLB_API
                         List<CustomLobbyInfo> allLobbies = [];
                         Platforms.ForEach(x => allLobbies.AddRange(x.Lobbies?.Lobbies ?? []));
 
-                        FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], Platforms[0]?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
-                        Lobbies = await CreateResponse([.. allLobbies], Platforms[0]?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        var latest = Platforms.OrderByDescending(x => x.Client?.Handler?.LastFetch ?? DateTimeOffset.FromUnixTimeMilliseconds(1)).FirstOrDefault();
+
+                        FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], latest?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
+                        Lobbies = await CreateResponse([.. allLobbies], latest?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
 
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
                         await HandleDiscordBot();
@@ -368,7 +370,7 @@ namespace FLB_API
                 }
                 else
                 {
-                    Logger?.Warning("Fusion Client is not initialized, skipping lobby fetch...");
+                    Logger?.Warning("None of the platforms are initialized, skipping lobby fetch...");
                 }
                 await Task.Delay((Settings?.Interval ?? 30) * 1000, token);
             }
