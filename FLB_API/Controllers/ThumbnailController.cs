@@ -103,7 +103,7 @@ namespace FLB_API.Controllers
                 }
                 catch (Exception ex)
                 {
-                    Program.Logger?.Error(ex, "Error fetching thumbnail for {0}", modId);
+                    Program.Logger?.Error(ex, "Error fetching thumbnail for {0}", modIdNum);
                     return Problem("An error occurred while fetching the thumbnail", statusCode: 500, title: "Server Exception");
                 }
             }
@@ -126,7 +126,7 @@ namespace FLB_API.Controllers
             if (thumbnail.Image != null)
                 return File(thumbnail.Image, "image/png", name);
 
-            Program.Logger?.Error("The thumbnail for {0} was null.", modId);
+            Program.Logger?.Error("The thumbnail for {0} was null.", modIdNum);
             return Problem("An error occurred while fetching the thumbnail", statusCode: 500, title: "Server Exception");
         }
 
