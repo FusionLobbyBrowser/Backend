@@ -279,7 +279,7 @@ namespace FusionAPI.Handlers
             if (DeInitCancel != null)
                 await DeInitCancel.CancelAsync();
             DeInitCancel = new CancellationTokenSource();
-            var copy = CancellationTokenSource.CreateLinkedTokenSource(this.DeInitCancel.Token);
+            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.DeInitCancel.Token);
 
             if (CancellationTokenSource != null)
                 await CancellationTokenSource.CancelAsync();
