@@ -64,7 +64,10 @@ namespace FusionAPI.Handlers
 
         private async Task? CallbackLoop()
         {
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource();
+            if (CancellationTokenSource == null)
+                return;
+
+            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
             while (!copy.IsCancellationRequested)
             {
                 // In order for the callbacks to get routed, they need to be handled by the manager
@@ -82,6 +85,11 @@ namespace FusionAPI.Handlers
         {
             try
             {
+                if (CancellationTokenSource == null)
+                    return;
+
+                using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
+
                 Logger?.Info("Connected to Steam, logging in as {0}...", Username ?? "N/A");
 
                 if (SteamClient == null)
@@ -99,9 +107,12 @@ namespace FusionAPI.Handlers
                     GuardData = _previouslyStoredGuardData,
                 });
 
-                var pollResponse = await authSession.PollingWaitForResultAsync();
+                var pollResponse = await authSession.PollingWaitForResultAsync(copy.Token);
                 if (pollResponse.NewGuardData != null)
                     _previouslyStoredGuardData = pollResponse.NewGuardData;
+
+                if (copy.IsCancellationRequested)
+                    return;
 
                 SteamUser?.LogOn(new SteamUser.LogOnDetails()
                 {
@@ -139,7 +150,10 @@ namespace FusionAPI.Handlers
 
         private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
         {
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource();
+            if (CancellationTokenSource == null)
+                return;
+
+            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
             const int reconnectDelay = 5000;
             if (ReconnectTime > 0)
             {
@@ -230,7 +244,7 @@ namespace FusionAPI.Handlers
                 await DeInitCancel.CancelAsync();
 
             CancellationTokenSource = new CancellationTokenSource();
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource();
+            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
             if (!metadata.TryGetValue("username", out var value1) || !metadata.TryGetValue("password", out string? value))
                 throw new AuthenticationException("SteamKitHandler requires 'username' and 'password' in metadata to initialize!");
 
@@ -265,13 +279,14 @@ namespace FusionAPI.Handlers
             if (DeInitCancel != null)
                 await DeInitCancel.CancelAsync();
             DeInitCancel = new CancellationTokenSource();
+            var copy = CancellationTokenSource.CreateLinkedTokenSource(this.DeInitCancel.Token);
 
             if (CancellationTokenSource != null)
                 await CancellationTokenSource.CancelAsync();
             SteamClient?.Disconnect();
 
-            while (IsInitialized && !DeInitCancel.IsCancellationRequested)
-                await Task.Delay(250);
+            while (IsInitialized && !copy.IsCancellationRequested)
+                await Task.Delay(250, copy.Token);
         }
 
         internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby
