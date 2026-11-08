@@ -58,7 +58,7 @@ namespace FLB_API
             {
                 Lobbies = await Program.CreateResponse(await Internal_FetchLobbies() ?? [],
                     Client.Handler.LastFetch, Program.Settings?.Interval ?? 30);
-                return await Internal_FetchLobbies(true) ?? [];
+                return (Client.Handler.SupportsFriendsOnly ? await Internal_FetchLobbies(true) : []) ?? [];
             }
             else
             {

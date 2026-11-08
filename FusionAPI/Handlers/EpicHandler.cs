@@ -19,7 +19,7 @@ namespace FusionAPI.Handlers
 
         public bool IsInitialized => Runtime?.IsInitialized ?? false;
 
-        public bool SupportsFriendsOnly { get; } = false;
+        public bool SupportsFriendsOnly { get; } = true;
 
         internal EpicRuntime? Runtime { get; private set; }
 
@@ -31,6 +31,7 @@ namespace FusionAPI.Handlers
 
         public string ID => "Epic";
 
+        // cant fetch both public and friends only at the same time
         public async Task<IMatchmakingLobby[]> GetLobbies(bool publicLobbies = true, bool friendsOnlyLobbies = false)
         {
             if (!IsInitialized)
@@ -67,7 +68,10 @@ namespace FusionAPI.Handlers
             SetParameter(ref searchHandle, LobbyKeys.IDENTIFIER_KEY, bool.TrueString, ComparisonOp.Equal);
             SetParameter(ref searchHandle, LobbyKeys.GAME_KEY, "BONELAB", ComparisonOp.Equal);
 
-            SetParameter(ref searchHandle, LobbyKeys.PRIVACY_KEY, ((int)ServerPrivacy.PUBLIC).ToString(), ComparisonOp.Equal);
+            if (publicLobbies)
+                SetParameter(ref searchHandle, LobbyKeys.PRIVACY_KEY, ((int)ServerPrivacy.PUBLIC).ToString(), ComparisonOp.Equal);
+            if (friendsOnlyLobbies)
+                SetParameter(ref searchHandle, LobbyKeys.PRIVACY_KEY, ((int)ServerPrivacy.FRIENDS_ONLY).ToString(), ComparisonOp.Equal);
 
             var lobbySearchFindOptions = new LobbySearchFindOptions
             {
