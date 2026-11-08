@@ -19,6 +19,9 @@ namespace FLB_API
         [JsonPropertyName("date")]
         public long Date { get; set; }
 
+        [JsonPropertyName("current_time")]
+        public long CurrentTime => DateTimeOffset.Now.ToUnixTimeSeconds();
+
         [JsonPropertyName("interval")]
         public int Interval { get; set; }
 
