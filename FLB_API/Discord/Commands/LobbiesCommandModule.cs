@@ -269,7 +269,7 @@ namespace FLB_API.Discord.Commands
                 list = Program.Lobbies;
             }
 
-            if (string.IsNullOrWhiteSpace(list?.Json))
+            if (list == null)
                 return DiscordBotManager.Error("The server did not fetch lobbies yet");
 
             lobbies = list;

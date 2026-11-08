@@ -10,9 +10,6 @@ namespace FLB_API
     [JsonSourceGenerationOptions(WriteIndented = true)]
     public class LobbyListResponse
     {
-        [JsonIgnore]
-        public string Json { get; set; }
-
         [JsonPropertyName("lobbies")]
         public CustomLobbyInfo[] Lobbies { get; set; }
 
@@ -20,7 +17,7 @@ namespace FLB_API
         public long Date { get; set; }
 
         [JsonPropertyName("current_time")]
-        public long CurrentTime => DateTimeOffset.Now.ToUnixTimeSeconds();
+        public long CurrentTime { get; set; } = DateTimeOffset.Now.ToUnixTimeSeconds();
 
         [JsonPropertyName("interval")]
         public int Interval { get; set; }
@@ -35,7 +32,6 @@ namespace FLB_API
             Date = date.ToUnixTimeSeconds();
             Interval = interval;
             Friends = friends ?? [];
-            Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
 
         public LobbyListResponse(CustomLobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
@@ -44,7 +40,6 @@ namespace FLB_API
             Date = date.ToUnixTimeSeconds();
             Interval = interval;
             Friends = friends ?? [];
-            Json = JsonSerializer.Serialize(this, JsonSerializerOptions.Web);
         }
     }
 }

@@ -28,7 +28,8 @@ namespace FLB_API.Controllers
             [FromQuery(Name = "includeFriendsOnly")][Description("Should friends only lobbies be considered. This will only additionally include lobbies hosted by the authorized user's friends")] bool friendsOnly = true)
         {
             var (list, error) = await Lobbies(platform, friendsOnly);
-            return error ?? Program.CreateResult(list!.Json, contentType: ContentType);
+            var json = JsonSerializer.Serialize(list, JsonSerializerOptions.Web);
+            return error ?? Program.CreateResult(json, contentType: ContentType);
         }
 
         [HttpGet("query/{search}", Name = "GetLobby")]
@@ -89,14 +90,16 @@ namespace FLB_API.Controllers
                 list = Program.Lobbies;
             }
 
-            if (string.IsNullOrWhiteSpace(list?.Json))
+            if (list == null)
                 return new Tuple<LobbyListResponse?, ActionResult?>(null, Problem("Did not fetch lobbies yet", statusCode: 500, title: "No Lobbies"));
+
+            list.CurrentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
 
             if (!friendsOnly)
                 return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
 
             var self = User.GetSteamId();
-            if (self == -1 || string.IsNullOrWhiteSpace(Program.FriendsOnlyLobbies?.Json))
+            if (self == -1 || Program.FriendsOnlyLobbies == null)
                 return new Tuple<LobbyListResponse?, ActionResult?>(list, null);
 
             List<CustomLobbyInfo> copy = [.. (CustomLobbyInfo[])Program.FriendsOnlyLobbies.Lobbies.Clone()];

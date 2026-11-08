@@ -395,7 +395,7 @@ namespace FLB_API
         public static async Task<LobbyListResponse> CreateResponse(CustomLobbyInfo[] lobbies, DateTimeOffset date, int interval = 30, string[]? friends = null)
         {
             var converted = await lobbies.Select(x => x.Convert()).Where(async x => Blacklist == null || await Blacklist.IsAllowed(x));
-            return new LobbyListResponse([.. converted], date, interval, friends ?? []);
+            return new LobbyListResponse([.. converted], date, interval, friends ?? []) { CurrentTime = DateTimeOffset.Now.ToUnixTimeSeconds() };
         }
 
         public static async Task<IEnumerable<T>> Where<T>(this IEnumerable<T> source, Func<T, Task<bool>> predicate)
