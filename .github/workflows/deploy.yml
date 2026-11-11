@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Create sixlabors.lic file
+      - name: Create sixlabors.lic File
         run: echo "${{ secrets.SIXLABORS_LICENSE }}" > ./FLB_API/sixlabors.lic
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -37,7 +37,7 @@ jobs:
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: "ignorethislmao"
+          known_hosts: "ilovecats"
       - name: Add Known Hosts
         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
       - name: Kill Backend
@@ -47,8 +47,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script: screen -XS FLB_Backend quit
-      - name: Deploy with rsync
+          script: bash -c 'screen -XS FLB_Backend quit || true'
+      - name: Deploy With rsync
         run: rsync -avz --exclude='settings.json' ./FLB_API/bin/Release/net10.0/linux-arm64/publish/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BACKEND_LOCATION }}
       - name: Start Backend
         uses: appleboy/ssh-action@v1
