@@ -43,6 +43,8 @@ namespace FLB_API
 
         internal static CancellationTokenSource? AuthCancel { get; private set; }
 
+        internal static string CurrentDir => AppDomain.CurrentDomain.BaseDirectory;
+
         internal static Settings DefaultSettings { get; } = new()
         {
             Interval = 30,
@@ -65,10 +67,13 @@ namespace FLB_API
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            if (!Directory.Exists(Path.Combine(CurrentDir, "Logs")))
+                Directory.CreateDirectory(Path.Combine(CurrentDir, "Logs"));
+
             Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .WriteTo.Spectre()
-                .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
+                .WriteTo.File(Path.Combine(CurrentDir, "Logs", "log-.txt"), rollingInterval: RollingInterval.Day)
                 .CreateLogger();
 
             // Add services to the container.
@@ -122,6 +127,8 @@ namespace FLB_API
 
                 Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
                 Logger?.Information("Successfully initialized EOS API");
+
+                ThumbnailManager.Logger = new Logger(level, "ModIO");
 
                 Uptime = DateTime.UtcNow;
                 Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
@@ -318,7 +325,7 @@ namespace FLB_API
                 return;
 
             Logger?.Information("Saving settings...");
-            var path = Path.Combine(Directory.GetCurrentDirectory(), "settings.json");
+            var path = Path.Combine(CurrentDir, "settings.json");
             Settings.Preferences = new Preferences()
             {
                 Use = true,

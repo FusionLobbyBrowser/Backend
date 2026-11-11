@@ -32,21 +32,28 @@ namespace FLB_API.Blacklist.Modules
             return Task.FromResult(true);
         }
 
-        public async Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Data.Interfaces.ILogger logger)
+        public Task<bool> InitAsync(BlacklistManager manager, FusionAPI.Data.Interfaces.ILogger logger)
         {
-            _deinitialized = false;
-            Instance = manager;
-            Logger = logger;
-
-            _ = Task.Factory.StartNew(async () =>
+            try
             {
-                while (!_deinitialized)
+                _deinitialized = false;
+                Instance = manager;
+                Logger = logger;
+
+                _ = Task.Factory.StartNew(async () =>
                 {
-                    await LoadBans();
-                    await Task.Delay(30 * 1000);
-                }
-            });
-            return true;
+                    while (!_deinitialized)
+                    {
+                        await LoadBans();
+                        await Task.Delay(30 * 1000);
+                    }
+                });
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<bool>(ex);
+            }
         }
 
         public Task<bool> IsLobbyAllowed(CustomLobbyInfo info)
@@ -101,7 +108,7 @@ namespace FLB_API.Blacklist.Modules
                 }
 
                 Logger?.Info("Loading blacklisted users...");
-                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blacklistedUsers.json");
+                var path = Path.Combine(Program.CurrentDir, "blacklistedUsers.json");
                 if (!File.Exists(path))
                 {
                     Logger?.Info("Blacklisted users file is missing, creating...");

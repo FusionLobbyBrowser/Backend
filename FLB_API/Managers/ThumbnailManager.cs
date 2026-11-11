@@ -27,6 +27,8 @@ namespace FLB_API.Managers
 
         public static IReadOnlyList<int> FurryMods => _furryMods.AsReadOnly();
 
+        public static FusionAPI.Data.Interfaces.ILogger? Logger { get; set; }
+
         public static async Task Setup()
         {
             lock (Lock)
@@ -41,14 +43,14 @@ namespace FLB_API.Managers
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, "An unexpected error has occurred while fetching avatars from collection");
+                Logger?.Error("An unexpected error has occurred while fetching avatars from collection", ex);
             }
             while (true)
             {
                 await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
                 int count;
                 lock (Lock) count = Thumbnails.Count;
-                Program.Logger?.Information("Starting cleanup process! Processing {0} thumbnails...", count);
+                Logger?.Info("Starting cleanup process! Processing {0} thumbnails...", count);
                 List<MemoryThumbnail> toRemove;
                 lock (Lock)
                 {
@@ -63,7 +65,7 @@ namespace FLB_API.Managers
                     }
                 }
 
-                Program.Logger?.Information("Removed {0} thumbnails!", toRemove.Count);
+                Logger?.Info("Removed {0} thumbnails!", toRemove.Count);
 
                 GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
 #pragma warning disable S1215
@@ -76,18 +78,18 @@ namespace FLB_API.Managers
                 }
                 catch (Exception ex)
                 {
-                    Program.Logger?.Error(ex, "An unexpected error has occurred while fetching avatars from collection");
+                    Logger?.Error("An unexpected error has occurred while fetching avatars from collection", ex);
                 }
             }
         }
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
         {
-            Program.Logger?.Information("Remotely fetching mod thumbnail for {0}", modId);
+            Logger?.Info("Remotely fetching mod thumbnail for {0}", modId);
 
             if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) || Program.Settings.ModIoToken == "your-token")
             {
-                Program.Logger?.Warning("Mod.io token is not set. Cannot fetch remote mod thumbnail.");
+                Logger?.Warning("Mod.io token is not set. Cannot fetch remote mod thumbnail.");
                 return null;
             }
 
@@ -108,11 +110,11 @@ namespace FLB_API.Managers
 
         public static async Task FetchAvatarsFromCollection()
         {
-            Program.Logger?.Information("Getting avatars from collection {0}", CollectionId);
+            Logger?.Info("Getting avatars from collection {0}", CollectionId);
 
             if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoPersonalAccessToken) || Program.Settings.ModIoPersonalAccessToken == "your-token")
             {
-                Program.Logger?.Warning("Mod.io personal access token is not set. Cannot fetch mods.");
+                Logger?.Warning("Mod.io personal access token is not set. Cannot fetch mods.");
                 return;
             }
 
@@ -122,7 +124,7 @@ namespace FLB_API.Managers
 
             do
             {
-                Program.Logger?.Information("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
+                Logger?.Info("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/collections/{CollectionId}/mods?_offset={offset}");
                 request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoPersonalAccessToken}");
                 request.Headers.Add("Accept", "application/json");
@@ -130,7 +132,7 @@ namespace FLB_API.Managers
                 var body = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    Program.Logger?.Error("Failed to fetch avatars from collection. Status code: {0} ({1})\n{2}", response.StatusCode, response.ReasonPhrase, body);
+                    Logger?.Error("Failed to fetch avatars from collection. Status code: {0} ({1})\n{2}", response.StatusCode, response.ReasonPhrase ?? "N/A", body);
                     return;
                 }
                 var json = JsonSerializer.Deserialize<JsonDocument>(body);
@@ -146,7 +148,7 @@ namespace FLB_API.Managers
             }
             while (total > offset);
             _furryMods = mods;
-            Program.Logger?.Information("Updated list, now has {0} furry mods", mods.Count);
+            Logger?.Info("Updated list, now has {0} furry mods", mods.Count);
         }
 
         public static CustomLobbyInfo Convert(this LobbyInfo info)
@@ -159,7 +161,7 @@ namespace FLB_API.Managers
         {
             try
             {
-                Program.Logger?.Information("Getting mod thumbnail for {0} ({1})", modId, barcode ?? "N/A");
+                Logger?.Info("Getting mod thumbnail for {0} ({1})", modId, barcode ?? "N/A");
                 if (modId == -1)
                     return GetWithBarcode(barcode);
 
@@ -170,7 +172,7 @@ namespace FLB_API.Managers
                 {
                     if (item.IsThumbnailValid())
                     {
-                        Program.Logger?.Information("Found cached mod thumbnail for {0}", modId);
+                        Logger?.Info("Found cached mod thumbnail for {0}", modId);
                         lock (Lock)
                         {
                             if (!string.IsNullOrWhiteSpace(barcode) && !item.Barcodes.Contains(barcode))
@@ -180,7 +182,7 @@ namespace FLB_API.Managers
                     }
                     else
                     {
-                        Program.Logger?.Information("Found an outdated thumbnail, removing...");
+                        Logger?.Info("Found an outdated thumbnail, removing...");
                         lock (Lock)
                             Thumbnails.Remove(item);
                     }
@@ -202,7 +204,7 @@ namespace FLB_API.Managers
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, "Error getting mod thumbnail for {0}", modId);
+                Logger?.Error("Error getting mod thumbnail for {0}", ex, modId);
                 return null;
             }
         }
@@ -224,7 +226,7 @@ namespace FLB_API.Managers
             }
             catch (Exception ex)
             {
-                Program.Logger?.Error(ex, "An unexpected error has occurred while checking if a mod is NSFW");
+                Logger?.Error("An unexpected error has occurred while checking if a mod is NSFW", ex);
                 return false;
             }
         }
@@ -239,23 +241,23 @@ namespace FLB_API.Managers
 
             if (!IsValidBarcode(barcode))
             {
-                Program.Logger?.Information("An invalid barcode was provided! Barcode: {0}", barcode);
+                Logger?.Info("An invalid barcode was provided! Barcode: {0}", barcode);
                 return null;
             }
 
-            Program.Logger?.Information("A barcode was only provided, trying to find an existing cache...");
+            Logger?.Info("A barcode was only provided, trying to find an existing cache...");
             MemoryThumbnail? item;
             lock (Lock)
                 item = Thumbnails.FirstOrDefault(x => x.Barcodes?.Contains(barcode) == true);
             // This ignores cache, as level without mod id is quite rare and there's a chance there will be another request to have a mod id associated
             if (item != null)
             {
-                Program.Logger?.Information("Found cached mod thumbnail for {0}", barcode);
+                Logger?.Info("Found cached mod thumbnail for {0}", barcode);
                 return item;
             }
             else
             {
-                Program.Logger?.Information("Could not find a cached thumbnail for {0}", barcode);
+                Logger?.Info("Could not find a cached thumbnail for {0}", barcode);
                 return null;
             }
         }

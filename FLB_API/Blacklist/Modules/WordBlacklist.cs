@@ -80,7 +80,7 @@ namespace FLB_API.Blacklist.Modules
             try
             {
                 Logger?.Info("Loading blacklisted words...");
-                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blacklistedWords.json");
+                var path = Path.Combine(Program.CurrentDir, "blacklistedWords.json");
                 if (!File.Exists(path))
                 {
                     Logger?.Info("Blacklisted words file is missing, creating...");
