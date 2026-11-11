@@ -49,7 +49,7 @@ jobs:
           port: 22
           script: bash -c 'screen -XS FLB_Backend quit || true'
       - name: Deploy With rsync
-        run: rsync -avz --exclude='settings.json' ./FLB_API/bin/Release/net10.0/linux-arm64/publish/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BACKEND_LOCATION }}
+        run: rsync -avz --exclude='settings.json' ./FLB_API/bin/Release/net11.0/linux-arm64/publish/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BACKEND_LOCATION }}
       - name: Start Backend
         uses: appleboy/ssh-action@v1
         with:
