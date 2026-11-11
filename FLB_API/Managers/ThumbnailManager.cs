@@ -1,5 +1,6 @@
 ﻿using System.Runtime;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 using FusionAPI.Data.Containers;
@@ -97,7 +98,11 @@ namespace FLB_API.Managers
             request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
             request.Headers.Add("Accept", "application/json");
             using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                Logger?.Error($"Failed to fetch remote mod thumbnail. {CreateErrMsg(await response.Content.ReadAsStringAsync(), (int)response.StatusCode)}");
+                return null;
+            }
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
             var maturity = json.GetProperty("maturity_option").GetInt16() == 8;
             string? thumbnail = null;
@@ -132,7 +137,7 @@ namespace FLB_API.Managers
                 var body = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    Logger?.Error("Failed to fetch avatars from collection. Status code: {0} ({1})\n{2}", response.StatusCode, response.ReasonPhrase ?? "N/A", body);
+                    Logger?.Error($"Failed to fetch avatars from collection. {CreateErrMsg(body, (int)response.StatusCode)}");
                     return;
                 }
                 var json = JsonSerializer.Deserialize<JsonDocument>(body);
@@ -310,6 +315,25 @@ namespace FLB_API.Managers
             }
         }
 
+        public static string CreateErrMsg(string body, int statusCode)
+        {
+            try
+            {
+                var json = JsonSerializer.Deserialize<ThumbnailRequestError>(body);
+                return
+                    $"Request returned code {json?.Error?.Code ?? -1} with error reference {json?.Error?.ErrorRef ?? -1} (Status Code: {statusCode}): {json?.Error?.Message ?? "Unknown error"}";
+            }
+            catch (JsonException)
+            {
+                return $"Could not deserialize error body (Status Code: {statusCode}), body: {body}";
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error("An unexpected error has occurred while creating an error message", ex);
+                return $"Request returned status code {statusCode} with body: {body}";
+            }
+        }
+
         [GeneratedRegex(@"^[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?\.[a-zA-Z0-9]{1,}?$")]
         private static partial Regex BarcodeValidationRegex();
     }
@@ -343,5 +367,28 @@ namespace FLB_API.Managers
             ExpireTime = null;
             ModId = -1;
         }
+    }
+
+    [method: JsonConstructor]
+    public class ThumbnailRequestError()
+    {
+        [JsonPropertyName("error")]
+        public ThumbnailRequestErrorDetails? Error { get; set; }
+    }
+
+    [method: JsonConstructor]
+    public class ThumbnailRequestErrorDetails()
+    {
+        [JsonPropertyName("code")]
+        public int Code { get; set; }
+
+        [JsonPropertyName("error_ref")]
+        public int ErrorRef { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("errors")]
+        public JsonDocument? Errors { get; set; }
     }
 }
