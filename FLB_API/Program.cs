@@ -212,6 +212,7 @@ namespace FLB_API
             string choice;
             var preferences = false;
 
+            // TODO: add setup screen
             if (Settings?.Preferences?.Use == true)
             {
                 preferences = true;

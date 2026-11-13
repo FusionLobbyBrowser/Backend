@@ -67,12 +67,12 @@ namespace FusionAPI.Handlers
             if (CancellationTokenSource == null)
                 return;
 
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
+            var copy = CancellationTokenSource.Token;
             while (!copy.IsCancellationRequested)
             {
                 // In order for the callbacks to get routed, they need to be handled by the manager
                 CallbackManager?.RunCallbacks();
-                await Task.Delay(50, copy.Token);
+                await Task.Delay(50, copy);
             }
         }
 
@@ -88,14 +88,14 @@ namespace FusionAPI.Handlers
                 if (CancellationTokenSource == null)
                     return;
 
-                using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
+                var copy = CancellationTokenSource.Token;
 
                 Logger?.Info("Connected to Steam, logging in as {0}...", Username ?? "N/A");
 
                 if (SteamClient == null)
                     return;
 
-                var authSession = await SteamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new()
+                var authSession = await SteamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new AuthSessionDetails
                 {
                     Username = Username,
                     Password = Password,
@@ -107,7 +107,7 @@ namespace FusionAPI.Handlers
                     GuardData = _previouslyStoredGuardData,
                 });
 
-                var pollResponse = await authSession.PollingWaitForResultAsync(copy.Token);
+                var pollResponse = await authSession.PollingWaitForResultAsync(copy);
                 if (pollResponse.NewGuardData != null)
                     _previouslyStoredGuardData = pollResponse.NewGuardData;
 
@@ -126,10 +126,10 @@ namespace FusionAPI.Handlers
                 if (ex.Result == EResult.RateLimitExceeded)
                 {
                     Logger?.Error("Authentication failed due to rate limit, retrying after 5 mins");
+                    ReconnectTime = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
                 }
                 else
                 {
-                    ReconnectTime = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
                     Logger?.Error("Authentication failed: {0}", ex);
                 }
 
@@ -145,7 +145,8 @@ namespace FusionAPI.Handlers
         private async Task DisconnectedCallback(SteamClient.DisconnectedCallback callback)
         {
             Logger?.Info("Disconnected from Steam.");
-            await ReconnectAsync();
+            if (!callback.UserInitiated)
+                await ReconnectAsync();
         }
 
         private async Task ReconnectAsync(bool ignoreAdditionalDelay = true)
@@ -153,16 +154,16 @@ namespace FusionAPI.Handlers
             if (CancellationTokenSource == null)
                 return;
 
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
+            var copy = CancellationTokenSource.Token;
             const int reconnectDelay = 5000;
             if (ReconnectTime > 0)
             {
-                await Task.Delay(reconnectDelay, copy.Token);
+                await Task.Delay(reconnectDelay, copy);
             }
             else
             {
                 while (ReconnectTime > 0 && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < ReconnectTime)
-                    await Task.Delay(50, copy.Token);
+                    await Task.Delay(50, copy);
             }
             if (SteamClient == null || SteamClient?.IsConnected == true || copy.IsCancellationRequested)
                 return;
@@ -177,7 +178,7 @@ namespace FusionAPI.Handlers
                 if (ignoreAdditionalDelay)
                     return;
                 Logger?.Error("The reconnection will be delayed by a minute");
-                await Task.Delay(60000 - reconnectDelay, copy.Token);
+                await Task.Delay(60000 - reconnectDelay, copy);
             }
         }
 
@@ -244,7 +245,7 @@ namespace FusionAPI.Handlers
                 await DeInitCancel.CancelAsync();
 
             CancellationTokenSource = new CancellationTokenSource();
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.CancellationTokenSource.Token);
+            var copy = CancellationTokenSource.Token;
             if (!metadata.TryGetValue("username", out var value1) || !metadata.TryGetValue("password", out string? value))
                 throw new AuthenticationException("SteamKitHandler requires 'username' and 'password' in metadata to initialize!");
 
@@ -263,15 +264,15 @@ namespace FusionAPI.Handlers
             {
                 Logger?.Error("An error occurred while connecting to Steam: {0}", ex);
                 Logger?.Error("A reconnection attempt will be made in 30 seconds...");
-                await Task.Delay(30000, copy.Token);
+                await Task.Delay(30000, copy);
                 while (!IsInitialized && !copy.IsCancellationRequested)
                     await ReconnectAsync(false);
             }
 
-            _ = Task.Run(CallbackLoop, copy.Token);
+            _ = Task.Run(CallbackLoop, copy);
 
             while (!IsInitialized)
-                await Task.Delay(250, copy.Token);
+                await Task.Delay(250, copy);
         }
 
         public async Task DeInit()
@@ -279,14 +280,14 @@ namespace FusionAPI.Handlers
             if (DeInitCancel != null)
                 await DeInitCancel.CancelAsync();
             DeInitCancel = new CancellationTokenSource();
-            using var copy = CancellationTokenSource.CreateLinkedTokenSource(this.DeInitCancel.Token);
+            var copy = DeInitCancel.Token;
 
             if (CancellationTokenSource != null)
                 await CancellationTokenSource.CancelAsync();
             SteamClient?.Disconnect();
 
             while (IsInitialized && !copy.IsCancellationRequested)
-                await Task.Delay(250, copy.Token);
+                await Task.Delay(250, copy);
         }
 
         internal class SteamKitLobby(Lobby lobby, SteamClient? client) : IMatchmakingLobby
