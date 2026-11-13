@@ -151,80 +151,84 @@ namespace FLB_API.Managers
                 var res = Encoding.UTF8.GetString(bytes, 0, result.Count);
                 var initialMessage = JsonSerializer.Deserialize<WebSocketMessages>(res);
                 var first = initialMessage?.Messages?.FirstOrDefault();
-                if (first?.Operation == "device_login" &&
-                    first?.Context.TryGetProperty("login_url", out _) == true)
+                if (first?.Operation != "device_login" && first?.Context.TryGetProperty("login_url", out _) != true)
                 {
-                    var context = first.Context.Deserialize<DeviceLoginInitialResponseContext>();
-                    AuthCode = context;
-                    if (string.IsNullOrWhiteSpace(context.Code))
-                    {
-                        Logger?.Error("Provided code from the WebSocket is empty.");
-                        return;
-                    }
-                    Logger?.Info("Logging in using code {0}", context.Code);
-
-                    var dontSendReq = false;
-
-                    if (Program.Settings?.ModIo?.AccountToken?.IsValid() != true)
-                    {
-                        var manual = true;
-                        if (Program.Settings?.ModIo?.Auth?.Use == true)
-                        {
-                            Logger?.Info("Account token not provided or has expired, attempting to log in");
-                            var success = await LogIn();
-                            if (!success)
-                            {
-                                Logger?.Error(
-                                    "Failed to log in with the provided credentials. Manual login required.");
-                            }
-                            else
-                            {
-                                manual = false;
-                            }
-                        }
-
-                        if (manual)
-                        {
-                            dontSendReq = true;
-                            Logger?.Info(
-                                "No account token provided or has expired, please log in using the following URL: {0}",
-                                context.LoginUrl ?? "N/A");
-                            Logger?.Info("You have until {0} to log in!",
-                                DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
-                        }
-                    }
-
-                    if (!dontSendReq && !await SendAuthReq(context.Code))
-                    {
-                        Logger?.Error(
-                            "Failed to authenticate with the provided code. Ensure that the account token is correct!");
-                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                        return;
-                    }
-
-                    var aBytes = ArrayPool<byte>.Shared.Rent(4096);
-                    var aResult = await ws.ReceiveAsync(aBytes, CancellationToken.None);
-                    var ares = Encoding.UTF8.GetString(aBytes, 0, aResult.Count);
-                    var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
-                    var authFirst = aMessage?.Messages?.FirstOrDefault();
-
-                    if (authFirst is not { Operation: "login_success" } ||
-                        authFirst?.Context.TryGetProperty("access_token", out _) != true)
-                    {
-                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    }
-
-                    var finalContext = authFirst!.Context.Deserialize<DeviceLoginFinalResponseContext>();
-                    Logger?.Info("Successfully authenticated! Token expires at {0}",
-                        DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
-                    Program.Settings?.ModIo?.Token = new Token(finalContext.AccessToken!, finalContext.DateExpires);
+                    Logger?.Error("The initial message is not a device login message.");
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    return;
                 }
+
+                var context = first.Context.Deserialize<DeviceLoginInitialResponseContext>();
+                AuthCode = context;
+                if (string.IsNullOrWhiteSpace(context.Code))
+                {
+                    Logger?.Error("Provided code from the WebSocket is empty.");
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    return;
+                }
+                Logger?.Info("Logging in using code {0}", context.Code);
+
+                var dontSendReq = false;
+
+                if (Program.Settings?.ModIo?.AccountToken?.IsValid() != true)
+                    dontSendReq = await NotLoggedIn(context);
+
+                if (!dontSendReq && !await SendAuthReq(context.Code))
+                {
+                    Logger?.Error(
+                        "Failed to authenticate with the provided code. Ensure that the account token is correct!");
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    return;
+                }
+
+                var aBytes = ArrayPool<byte>.Shared.Rent(4096);
+                var aResult = await ws.ReceiveAsync(aBytes, CancellationToken.None);
+                var ares = Encoding.UTF8.GetString(aBytes, 0, aResult.Count);
+                var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
+                var authFirst = aMessage?.Messages?.FirstOrDefault();
+
+                if (authFirst is not { Operation: "login_success" } || authFirst?.Context.TryGetProperty("access_token", out _) != true)
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+
+                var finalContext = authFirst!.Context.Deserialize<DeviceLoginFinalResponseContext>();
+                Logger?.Info("Successfully authenticated! Token expires at {0}",
+                    DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
+                Program.Settings?.ModIo?.Token = new Token(finalContext.AccessToken!, finalContext.DateExpires);
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
             }
             finally
             {
                 IsAuthenticating = false;
             }
+        }
+
+        private static async Task<bool> NotLoggedIn(DeviceLoginInitialResponseContext context)
+        {
+            var manual = true;
+            if (Program.Settings?.ModIo?.Auth?.Use == true)
+            {
+                Logger?.Info("Account token not provided or has expired, attempting to log in");
+                var success = await LogIn();
+                if (!success)
+                {
+                    Logger?.Error(
+                        "Failed to log in with the provided credentials. Manual login required.");
+                }
+                else
+                {
+                    manual = false;
+                }
+            }
+
+            if (!manual)
+                return false;
+
+            Logger?.Info(
+                "No account token provided or has expired, please log in using the following URL: {0}",
+                context.LoginUrl ?? "N/A");
+            Logger?.Info("You have until {0} to log in!",
+                DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
+            return true;
         }
 
         private static async Task<bool> LogIn()
@@ -253,8 +257,18 @@ namespace FLB_API.Managers
             {
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
-                    Logger?.Warning("Too many requests to the email endpoint. Retrying in 5 minutes...");
-                    await Task.Delay(5 * 60 * 1000);
+                    var retryAfter = response.Headers.RetryAfter?.Date;
+                    if (retryAfter == null)
+                    {
+                        Logger?.Warning("Too many requests to the email endpoint. Retrying in 5 minutes...");
+                        await Task.Delay(5 * 60 * 1000);
+                    }
+                    else
+                    {
+                        Logger?.Warning("Too many requests to the email endpoint. Retrying at {0}", retryAfter);
+                        await Task.Delay((int)((response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60) * 1000));
+                    }
+
                     return await LogIn();
                 }
                 Logger?.Error("Failed to request email authentication ({0})", response.StatusCode);

@@ -92,62 +92,7 @@ namespace FLB_API
 
             try
             {
-                LoadSettings();
-
-                ILogger.LogLevel level;
-                string choice;
-                var preferences = false;
-
-                if (Settings?.Preferences?.Use == true)
-                {
-                    preferences = true;
-                    Logger?.Information("Using saved preferences");
-                    level = Settings.Preferences.LogLevel;
-                    choice = Settings.Preferences.AuthHandler;
-                    Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
-                }
-                else
-                {
-                    var choices = await AskUser();
-                    level = choices.Item1;
-                    choice = choices.Item2;
-                }
-
-                if (!preferences && Settings?.Preferences?.Use != false)
-                {
-                    var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
-                    if (answer && Settings != null)
-                        await SavePreferences(level, choice);
-                }
-
-                Dictionary<string, string> metadata = [];
-
-                Fusion steamClient;
-                if (choice.StartsWith("SteamKit"))
-                {
-                    steamClient = new Fusion(new SteamKitHandler());
-                    metadata = await SetupSteamKit(steamClient);
-                }
-                else
-                {
-                    Logger?.Information("Connecting with Steamworks");
-                    steamClient = new Fusion(new SteamworksHandler());
-                }
-
-                Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, metadata));
-                Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
-
-                Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
-                Logger?.Information("Successfully initialized EOS API");
-
-                ThumbnailManager.Logger = new Logger(level, "ModIO");
-
-                if (Program.Settings?.ModIo?.Enabled != false)
-                    await ThumbnailManager.Setup();
-
-                Uptime = DateTime.UtcNow;
-                Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
-                await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
+                await Setup();
             }
             catch (Exception e)
             {
@@ -258,6 +203,65 @@ namespace FLB_API
 
             await token.CancelAsync();
             token.Dispose();
+        }
+
+        private static async Task Setup()
+        {
+            LoadSettings();
+            ILogger.LogLevel level;
+            string choice;
+            var preferences = false;
+
+            if (Settings?.Preferences?.Use == true)
+            {
+                preferences = true;
+                Logger?.Information("Using saved preferences");
+                level = Settings.Preferences.LogLevel;
+                choice = Settings.Preferences.AuthHandler;
+                Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
+            }
+            else
+            {
+                var choices = await AskUser();
+                level = choices.Item1;
+                choice = choices.Item2;
+            }
+
+            if (!preferences && Settings?.Preferences?.Use != false)
+            {
+                var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
+                if (answer && Settings != null)
+                    await SavePreferences(level, choice);
+            }
+
+            Dictionary<string, string> metadata = [];
+
+            Fusion steamClient;
+            if (choice.StartsWith("SteamKit"))
+            {
+                steamClient = new Fusion(new SteamKitHandler());
+                metadata = await SetupSteamKit(steamClient);
+            }
+            else
+            {
+                Logger?.Information("Connecting with Steamworks");
+                steamClient = new Fusion(new SteamworksHandler());
+            }
+
+            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, metadata));
+            Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
+
+            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
+            Logger?.Information("Successfully initialized EOS API");
+
+            ThumbnailManager.Logger = new Logger(level, "ModIO");
+
+            if (Settings?.ModIo?.Enabled != false)
+                await ThumbnailManager.Setup();
+
+            Uptime = DateTime.UtcNow;
+            Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
+            await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
         }
 
         public static string ReplaceRegex(this string text, string pattern, string replacement)
