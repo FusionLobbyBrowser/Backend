@@ -95,8 +95,10 @@ namespace FLB_API.Managers
                 return null;
             }
 
-            var code = regex.Match(body.Text)?.Groups?["code"];
-            if (code?.Success != true)
+            var matchText = Regex.Replace(body.Text, @"\r\n?|\n", " ");
+            var match = regex.Match(matchText);
+            var code = match.Groups["code"];
+            if (!match.Success || !code.Success)
             {
                 Logger?.Error("Could not find the code");
                 return null;
@@ -120,10 +122,10 @@ namespace FLB_API.Managers
 
         public static Regex GetModIoRegEx() => ModIoAuthCode();
 
-        [GeneratedRegex(@"Login Code\n(?'code'.*)", RegexOptions.Multiline)]
+        [GeneratedRegex("Login Code\\n(?'code'.*)", RegexOptions.Multiline)]
         private static partial Regex SteamAuthCode();
 
-        [GeneratedRegex(@"age or older:\n\n(?'code'.*)", RegexOptions.Multiline)]
+        [GeneratedRegex("age or older:  (?'code'[A-Z0-9]{5})", RegexOptions.Multiline)]
         private static partial Regex ModIoAuthCode();
     }
 }

@@ -507,6 +507,25 @@ namespace FLB_API
             }
         }
 
+        public static void SaveSettings()
+        {
+            try
+            {
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                Logger?.Information("Saving settings");
+                using var stream = File.CreateText(path);
+                var serialized = JsonSerializer.Serialize(Settings);
+                stream.Write(serialized);
+                stream.Flush();
+                stream.Close();
+                Logger?.Information("Successfully saved settings!");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to save settings to file");
+            }
+        }
+
         internal static ContentResult CreateResult(string message, int statusCode = 200, string contentType = "text/plain")
         {
             return new ContentResult()

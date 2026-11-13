@@ -42,6 +42,7 @@ namespace FLB_API.Managers
 
         public static async Task Setup()
         {
+            HttpClient.DefaultRequestHeaders.Add("User-Agent", "FLB/1.0.0");
             lock (Lock)
             {
                 if (IsSetup) return;
@@ -144,7 +145,7 @@ namespace FLB_API.Managers
                 await ws.ConnectAsync(new Uri(uri), CancellationToken.None);
                 Logger?.Info("Sending initial device login request");
                 await ws.SendAsync(JsonSerializer.SerializeToUtf8Bytes(WebSocketMessages.LogIn()),
-                    WebSocketMessageType.Text, true, default);
+                    WebSocketMessageType.Text, true, CancellationToken.None);
                 Logger?.Info("Awaiting response to get code...");
                 var bytes = ArrayPool<byte>.Shared.Rent(4096);
                 var result = await ws.ReceiveAsync(bytes, CancellationToken.None);
@@ -194,6 +195,7 @@ namespace FLB_API.Managers
                 Logger?.Info("Successfully authenticated! Token expires at {0}",
                     DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
                 Program.Settings?.ModIo?.Token = new Token(finalContext.AccessToken!, finalContext.DateExpires);
+                Program.SaveSettings();
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
             }
             finally
@@ -295,12 +297,12 @@ namespace FLB_API.Managers
             exchangeRequest.Headers.Add("Accept", "application/json");
             var exchangeBody = new List<KeyValuePair<string, string>> { new("code", code) };
             exchangeRequest.Content = new FormUrlEncodedContent(exchangeBody);
-            using var exchangeResponse = await HttpClient.SendAsync(request);
+            using var exchangeResponse = await HttpClient.SendAsync(exchangeRequest);
 
             if (!exchangeResponse.IsSuccessStatusCode)
             {
-                Logger?.Error("Failed to log in ({0})", response.StatusCode);
-                Logger?.Error("Body: {0}", await response.Content.ReadAsStringAsync());
+                Logger?.Error("Failed to log in ({0})", exchangeResponse.StatusCode);
+                Logger?.Error("Body: {0}", await exchangeResponse.Content.ReadAsStringAsync());
                 return false;
             }
 
@@ -314,6 +316,7 @@ namespace FLB_API.Managers
             Logger?.Info("Token is valid until {0}", DateTimeOffset.FromUnixTimeSeconds(json.RootElement.GetProperty("date_expires").GetInt64()));
 
             Program.Settings?.ModIo?.AccountToken = new Token(json.RootElement.GetProperty("access_token").GetString() ?? string.Empty, json.RootElement.GetProperty("date_expires").GetInt64());
+            Program.SaveSettings();
 
             return true;
         }
