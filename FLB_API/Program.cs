@@ -238,7 +238,8 @@ namespace FLB_API
             Dictionary<string, string> metadata = [];
 
             Fusion steamClient;
-            if (choice.StartsWith("SteamKit"))
+            bool isSteamKit = choice.StartsWith("SteamKit");
+            if (isSteamKit)
             {
                 steamClient = new Fusion(new SteamKitHandler());
                 metadata = await SetupSteamKit(steamClient);
@@ -249,10 +250,10 @@ namespace FLB_API
                 steamClient = new Fusion(new SteamworksHandler());
             }
 
-            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, metadata));
+            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, !isSteamKit, metadata));
             Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
 
-            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
+            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, true, []));
             Logger?.Information("Successfully initialized EOS API");
 
             ThumbnailManager.Logger = new Logger(level, "ModIO");
