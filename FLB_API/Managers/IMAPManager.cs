@@ -122,7 +122,7 @@ namespace FLB_API.Managers
 
         public static Regex GetModIoRegEx() => ModIoAuthCode();
 
-        [GeneratedRegex("Login Code\\n(?'code'.*)", RegexOptions.Multiline)]
+        [GeneratedRegex("Login Code (?'code'[A-Z0-9]{5})", RegexOptions.Multiline)]
         private static partial Regex SteamAuthCode();
 
         [GeneratedRegex("age or older:  (?'code'[A-Z0-9]{5})", RegexOptions.Multiline)]
