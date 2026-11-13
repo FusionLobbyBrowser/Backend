@@ -1,9 +1,15 @@
-﻿using System.Runtime;
+﻿using System.Buffers;
+using System.Net;
+using System.Net.WebSockets;
+using System.Runtime;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 using FusionAPI.Data.Containers;
+
+using NetCord.Services;
 
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
@@ -12,7 +18,7 @@ namespace FLB_API.Managers
 {
     public static partial class ThumbnailManager
     {
-        private const int GameId = 3809;
+        internal const int GameId = 3809;
 
         private const int CollectionId = 92630;
 
@@ -30,12 +36,41 @@ namespace FLB_API.Managers
 
         public static FusionAPI.Data.Interfaces.ILogger? Logger { get; set; }
 
+        private static bool IsAuthenticating { get; set; } = false;
+
+        private static DeviceLoginInitialResponseContext AuthCode { get; set; }
+
         public static async Task Setup()
         {
             lock (Lock)
             {
                 if (IsSetup) return;
                 IsSetup = true;
+            }
+
+            Logger?.Info("Ensuring token is valid...");
+            if (!string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) && Program.Settings.ModIoToken != "your-token")
+            {
+                Logger?.Info("Token is provided, making sample request to API");
+                using var request = new HttpRequestMessage(HttpMethod.Get,
+                    $"https://g-{GameId}.modapi.io/v1/games/{GameId}/mods/4067166");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
+                request.Headers.Add("Accept", "application/json");
+                using var response = await HttpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Logger?.Error($"Token is not valid, re-authenticating...");
+                    await Authenticate();
+                }
+                else
+                {
+                    Logger?.Info("Token is valid!");
+                }
+            }
+            else
+            {
+                Logger?.Error("Token is not valid, re-authenticating...");
+                await Authenticate();
             }
 
             try
@@ -46,42 +81,136 @@ namespace FLB_API.Managers
             {
                 Logger?.Error("An unexpected error has occurred while fetching avatars from collection", ex);
             }
-            while (true)
+
+            _ = Task.Run(async () =>
             {
-                await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
-                int count;
-                lock (Lock) count = Thumbnails.Count;
-                Logger?.Info("Starting cleanup process! Processing {0} thumbnails...", count);
-                List<MemoryThumbnail> toRemove;
-                lock (Lock)
+                while (true)
                 {
-                    toRemove = [.. Thumbnails.Where(x => !x.IsThumbnailValid())];
-                    foreach (var r in toRemove)
+                    await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
+                    int count;
+                    lock (Lock) count = Thumbnails.Count;
+                    Logger?.Info("Starting cleanup process! Processing {0} thumbnails...", count);
+                    List<MemoryThumbnail> toRemove;
+                    lock (Lock)
                     {
-                        r.Image = null;
-                        r.Barcodes = [];
-                        r.ExpireTime = null;
-                        r.ModId = -1;
-                        Thumbnails.Remove(r);
+                        toRemove = [.. Thumbnails.Where(x => !x.IsThumbnailValid())];
+                        foreach (var r in toRemove)
+                        {
+                            r.Image = null;
+                            r.Barcodes = [];
+                            r.ExpireTime = null;
+                            r.ModId = -1;
+                            Thumbnails.Remove(r);
+                        }
+                    }
+
+                    Logger?.Info("Removed {0} thumbnails!", toRemove.Count);
+
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+#pragma warning disable S1215
+                    // need to improve this later
+                    GC.Collect();
+#pragma warning restore S1215
+                    try
+                    {
+                        await FetchAvatarsFromCollection();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Error("An unexpected error has occurred while fetching avatars from collection", ex);
                     }
                 }
+            });
+        }
 
-                Logger?.Info("Removed {0} thumbnails!", toRemove.Count);
+        private static async Task Authenticate()
+        {
+            if (IsAuthenticating)
+            {
+                if (!string.IsNullOrWhiteSpace(Program.Settings?.ModIoAccountToken)) return;
+                Logger?.Info("No account token provided, please log in using the following URL: {0}", AuthCode.LoginUrl);
+                Logger?.Info("You have until {0} to log in!", DateTimeOffset.FromUnixTimeSeconds(AuthCode.DateExpires));
 
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-#pragma warning disable S1215
-                // need to improve this later
-                GC.Collect();
-#pragma warning restore S1215
-                try
+                return;
+            }
+
+            try
+            {
+                IsAuthenticating = true;
+                var uri = $"wss://g-{GameId}.ws.modapi.io/";
+                using ClientWebSocket ws = new();
+                Logger?.Info("Initializing WebSocket connection to {0}", uri);
+                await ws.ConnectAsync(new Uri(uri), CancellationToken.None);
+                Logger?.Info("Sending initial device login request");
+                await ws.SendAsync(JsonSerializer.SerializeToUtf8Bytes(WebSocketMessages.LogIn()),
+                    WebSocketMessageType.Text, true, default);
+                Logger?.Info("Awaiting response to get code...");
+                var bytes = ArrayPool<byte>.Shared.Rent(4096);
+                var result = await ws.ReceiveAsync(bytes, CancellationToken.None);
+                var res = Encoding.UTF8.GetString(bytes, 0, result.Count);
+                var initialMessage = JsonSerializer.Deserialize<WebSocketMessages>(res);
+                var first = initialMessage?.Messages?.FirstOrDefault();
+                if (first?.Operation == "device_login" &&
+                    first?.Context.TryGetProperty("login_url", out var url) == true)
                 {
-                    await FetchAvatarsFromCollection();
-                }
-                catch (Exception ex)
-                {
-                    Logger?.Error("An unexpected error has occurred while fetching avatars from collection", ex);
+                    var context = first.Context.Deserialize<DeviceLoginInitialResponseContext>();
+                    AuthCode = context;
+                    Logger?.Info("Logging in using code {0}", context.Code);
+
+                    if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoAccountToken))
+                    {
+                        Logger?.Info("No account token provided, please log in using the following URL: {0}",
+                            context.LoginUrl);
+                        Logger?.Info("You have until {0} to log in!",
+                            DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
+                    }
+                    else
+                    {
+                        if (!await SendAuthReq(context.Code))
+                        {
+                            Logger?.Error(
+                                "Failed to authenticate with the provided code. Ensure that the account token is correct!");
+                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                            return;
+                        }
+                    }
+
+                    var aBytes = ArrayPool<byte>.Shared.Rent(4096);
+                    var aResult = await ws.ReceiveAsync(aBytes, CancellationToken.None);
+                    var ares = Encoding.UTF8.GetString(aBytes, 0, aResult.Count);
+                    var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
+                    var authFirst = aMessage?.Messages?.FirstOrDefault();
+
+                    if (authFirst?.Operation != "login_success" ||
+                        authFirst?.Context.TryGetProperty("access_token", out var token) != true)
+                    {
+                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    }
+
+                    var finalContext = authFirst.Context.Deserialize<DeviceLoginFinalResponseContext>();
+                    Logger?.Info("Successfully authenticated! Token expires at {0}",
+                        DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
+                    Program.Settings?.ModIoToken = finalContext.AccessToken;
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
                 }
             }
+            finally
+            {
+                IsAuthenticating = false;
+            }
+        }
+
+        private static async Task<bool> SendAuthReq(string code)
+        {
+            using var request =
+                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/device/connect");
+            request.Headers.Add("Authorization", $"Bearer {Program.Settings?.ModIoAccountToken}");
+            request.Headers.Add("Accept", "application/json");
+            var body = new List<KeyValuePair<string, string>> { new("code", code) };
+            request.Content = new FormUrlEncodedContent(body);
+            using var response = await HttpClient.SendAsync(request);
+            Logger?.Info("Server responded with {0}", response.StatusCode, response.ReasonPhrase ?? "N/A");
+            return response.IsSuccessStatusCode;
         }
 
         private static async Task<RemoteThumbnailResponse?> GetRemoteModThumbnailUrl(long modId)
@@ -101,6 +230,7 @@ namespace FLB_API.Managers
             if (!response.IsSuccessStatusCode)
             {
                 Logger?.Error($"Failed to fetch remote mod thumbnail. {CreateErrMsg(await response.Content.ReadAsStringAsync(), (int)response.StatusCode)}");
+                if (response.StatusCode == HttpStatusCode.Unauthorized) _ = Task.Run(Authenticate);
                 return null;
             }
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
@@ -390,5 +520,87 @@ namespace FLB_API.Managers
 
         [JsonPropertyName("errors")]
         public JsonDocument? Errors { get; set; }
+    }
+
+    [method: JsonConstructor]
+    public class WebSocketMessages()
+    {
+        [JsonPropertyName("messages")]
+        public List<GenericWebSocketMessage> Messages { get; set; } = [];
+
+        public static WebSocketMessages LogIn()
+        {
+            var msg = new WebSocketMessages();
+            msg.Messages.Add(new GenericWebSocketMessage("device_login", new DeviceLoginRequestContext(ThumbnailManager.GameId)));
+            return msg;
+        }
+    }
+
+    public class GenericWebSocketMessage
+    {
+        [JsonPropertyName("operation")]
+        public string? Operation { get; set; }
+
+        [JsonPropertyName("context")]
+        public JsonElement Context { get; set; }
+
+        public GenericWebSocketMessage(string operation, JsonElement context)
+        {
+            Operation = operation;
+            Context = context;
+        }
+
+        public GenericWebSocketMessage(string operation, object context)
+        {
+            Operation = operation;
+            Context = JsonElement.Parse(JsonSerializer.Serialize(context));
+        }
+
+        [JsonConstructor]
+        public GenericWebSocketMessage()
+        {
+        }
+    }
+
+    public struct DeviceLoginRequestContext
+    {
+        [JsonPropertyName("game_id")]
+        public int GameId { get; set; }
+
+        public DeviceLoginRequestContext(int gameId)
+        {
+            GameId = gameId;
+        }
+
+        [JsonConstructor]
+        public DeviceLoginRequestContext()
+        {
+        }
+    }
+
+    [method: JsonConstructor]
+    public struct DeviceLoginFinalResponseContext()
+    {
+        [JsonPropertyName("code")]
+        public int Code { get; set; }
+
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; set; }
+
+        [JsonPropertyName("date_expires")]
+        public long DateExpires { get; set; }
+    }
+
+    [method: JsonConstructor]
+    public struct DeviceLoginInitialResponseContext()
+    {
+        [JsonPropertyName("code")]
+        public string Code { get; set; }
+
+        [JsonPropertyName("login_url")]
+        public string? LoginUrl { get; set; }
+
+        [JsonPropertyName("date_expires")]
+        public long DateExpires { get; set; }
     }
 }

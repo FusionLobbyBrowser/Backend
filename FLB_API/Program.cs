@@ -130,6 +130,8 @@ namespace FLB_API
 
                 ThumbnailManager.Logger = new Logger(level, "ModIO");
 
+                await ThumbnailManager.Setup();
+
                 Uptime = DateTime.UtcNow;
                 Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
                 await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
@@ -238,8 +240,6 @@ namespace FLB_API
 
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
-
-            _ = ThumbnailManager.Setup();
 
             await app.RunAsync();
 
