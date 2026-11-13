@@ -23,18 +23,20 @@ namespace FLB_API
 
         public LobbyListResponse? Lobbies { get; set; }
 
-        public Platform(Fusion client, ILogger? logger, PlatformType type)
+        public Platform(Fusion client, ILogger? logger, PlatformType type, bool autoReInit = true)
         {
             Client = client;
             Logger = logger;
             Type = type;
+            AutoReInit = autoReInit;
         }
 
-        public Platform(Fusion client, PlatformType type, ILogger.LogLevel level = ILogger.LogLevel.Info)
+        public Platform(Fusion client, PlatformType type, ILogger.LogLevel level = ILogger.LogLevel.Info, bool autoReInit = true)
         {
             Client = client;
             Logger = new Logger(level, Enum.GetName(type) ?? "N/A");
             Type = type;
+            AutoReInit = autoReInit;
         }
 
         public async Task Init(Dictionary<string, string>? metadata = null)
@@ -45,9 +47,9 @@ namespace FLB_API
                 await Client.Initialize(Logger, metadata);
         }
 
-        public static async Task<Platform> CreateAndInit(Fusion client, PlatformType type, ILogger.LogLevel level = ILogger.LogLevel.Info, Dictionary<string, string>? metadata = null)
+        public static async Task<Platform> CreateAndInit(Fusion client, PlatformType type, ILogger.LogLevel level = ILogger.LogLevel.Info, bool autoReInit = true, Dictionary<string, string>? metadata = null)
         {
-            var platform = new Platform(client, type, level);
+            var platform = new Platform(client, type, level, autoReInit);
             await platform.Init(metadata);
             return platform;
         }

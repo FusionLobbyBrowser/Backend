@@ -79,22 +79,24 @@ namespace FLB_API.Controllers
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
         [ProducesResponseType<FileStreamResult>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
         [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "The provided mod id is invalid or missing.")]
-        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server has encountered an error while fetching the thumbnail")]
         [ProducesResponseType<ProblemDetails>(404, contentType: "application/problem+json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "The requested thumbnail was from mod.io, while the server has the fetching from the external source disabled")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modId,
             [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")] string barcode = "")
         {
             barcode = barcode.Replace(Environment.NewLine, string.Empty);
-            if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
-                return Problem("modId is required.", statusCode: 400, title: "Missing Mod ID");
-
-            if (!long.TryParse(modId, out var modIdNum) && string.IsNullOrWhiteSpace(barcode))
-                return Problem("modId is not valid.", statusCode: 400, title: "Invalid Mod ID");
+            var validationIssue = Validate(modId, barcode, out var modIdNum);
+            if (validationIssue != null)
+                return validationIssue;
 
             MemoryThumbnail? thumbnail;
             if (modIdNum != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
             {
+                if (Program.Settings?.ModIo?.Enabled == false)
+                    return Problem("The server does not support fetching mod.io thumbnails as the functionality has been disabled by the person hosting", statusCode: 501, title: "Feature Disabled");
+
                 try
                 {
                     thumbnail = await ThumbnailManager.GetModThumbnail(modIdNum, barcode);
@@ -122,13 +124,28 @@ namespace FLB_API.Controllers
             Response.Headers.AccessControlExposeHeaders = [with(["ModIO-Maturity"])];
             Response.Headers.Append("ModIO-Maturity", MaturityHeader(thumbnail.IsNsfw));
 
-            var name = $"thumbnail_{(thumbnail.ModId != -1 ? thumbnail.ModId : barcode)}.png";
+            var name = GetThumbnailName(thumbnail.ModId, barcode);
             if (thumbnail.Image != null)
                 return File(thumbnail.Image, "image/png", name);
 
             Program.Logger?.Error("The thumbnail for {0} was null.", modIdNum);
             return Problem("An error occurred while fetching the thumbnail", statusCode: 500, title: "Server Exception");
         }
+
+        private ObjectResult? Validate(string modId, string barcode, out long modIdNum)
+        {
+            modIdNum = -1;
+
+            if (string.IsNullOrWhiteSpace(modId) && string.IsNullOrWhiteSpace(barcode))
+                return Problem("modId is required.", statusCode: 400, title: "Missing Mod ID");
+
+            if (!long.TryParse(modId, out modIdNum) && string.IsNullOrWhiteSpace(barcode))
+                return Problem("modId is not valid.", statusCode: 400, title: "Invalid Mod ID");
+
+            return null;
+        }
+
+        private static string GetThumbnailName(long modId, string barcode = "") => $"thumbnail_{(modId != -1 ? modId : barcode)}.png";
 
         private static string MaturityHeader(bool isNsfw) => isNsfw ? "nsfw" : "safe";
     }

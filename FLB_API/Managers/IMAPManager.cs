@@ -7,14 +7,31 @@ using MimeKit;
 
 namespace FLB_API.Managers
 {
-    public partial class IMAPManager(string host, int port, FusionAPI.Data.Interfaces.ILogger? logger = null)
+    public partial class IMAPManager
     {
-        public const string SUBJECT = "Your Steam account: Access from";
+        public const string STEAM_SUBJECT = "Your Steam account: Access from";
 
-        public string Host { get; set; } = host;
-        public int Port { get; set; } = port;
+        public const string MODIO_SUBJECT = "mod.io Security Code";
 
-        public FusionAPI.Data.Interfaces.ILogger? Logger { get; set; } = logger;
+        public string Host { get; set; }
+        public int Port { get; set; }
+
+        public FusionAPI.Data.Interfaces.ILogger? Logger { get; set; }
+
+        public IMAPManager(string host, int port, FusionAPI.Data.Interfaces.ILogger? logger = null)
+        {
+            Host = host;
+            Port = port;
+            Logger = logger;
+        }
+
+        public IMAPManager(ImapAuth auth, FusionAPI.Data.Interfaces.ILogger? logger = null, bool login = true)
+        {
+            Host = auth.Host!;
+            Port = auth.Port!;
+            Logger = logger;
+            if (login) LogIn(auth);
+        }
 
         public ImapClient? Client { get; set; }
 
@@ -28,19 +45,22 @@ namespace FLB_API.Managers
             Client.Authenticate(username, password);
         }
 
-        public async Task<string?> GetCodeAsync(float delay = 5, int maxTries = -1)
+        public void LogIn(ImapAuth auth)
+            => LogIn(auth.Username!, auth.Password!);
+
+        public async Task<string?> GetCodeAsync(Regex regex, string codeName = "Steam Auth Code", string subject = STEAM_SUBJECT, float delay = 5, int maxTries = -1)
         {
             var tries = 0;
             while (Client is { IsAuthenticated: true, IsConnected: true })
             {
-                Logger?.Info("Checking inbox for email regarding the Steam Auth Code...");
+                Logger?.Info("Checking inbox for email regarding the {0}...", codeName);
                 await Client.Inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
                 foreach (var msg in (await Client.Inbox.SearchAsync(SearchQuery.All)).Reverse().Take(5).ToList())
                 {
                     try
                     {
                         var message = await Client.Inbox.GetMessageAsync(msg);
-                        if (HandleMessage(message) is { } code && !string.IsNullOrWhiteSpace(code))
+                        if (HandleMessage(message, regex, codeName, subject) is { } code && !string.IsNullOrWhiteSpace(code))
                             return code;
                     }
                     catch (Exception ex)
@@ -51,7 +71,7 @@ namespace FLB_API.Managers
                 tries++;
                 if (tries >= maxTries && maxTries != -1)
                 {
-                    Logger?.Warning("Maximum number of tries reached ({0}). Stopping search for Steam Auth Code.", maxTries);
+                    Logger?.Warning("Maximum number of tries reached ({0}). Stopping search for {1}.", maxTries, codeName);
                     break;
                 }
                 await Task.Delay(TimeSpan.FromSeconds(delay));
@@ -59,22 +79,32 @@ namespace FLB_API.Managers
             return null;
         }
 
-        private string? HandleMessage(MimeMessage message)
+        private string? HandleMessage(MimeMessage message, Regex regex, string codeName = "Steam Auth Code", string subject = STEAM_SUBJECT)
         {
-            if (message?.Subject?.StartsWith(SUBJECT, StringComparison.OrdinalIgnoreCase) != true)
+            if (message?.Subject?.StartsWith(subject, StringComparison.OrdinalIgnoreCase) != true)
                 return null;
             Logger?.Info("Found an email containing the code! Extracting...");
-            return ExtractCode(message);
+            return ExtractCode(message, regex, codeName);
         }
 
-        private string? ExtractCode(MimeMessage message)
+        private string? ExtractCode(MimeMessage message, Regex regex, string codeName = "Steam Auth Code")
         {
             if (message.BodyParts.FirstOrDefault(x => x.ContentType.MimeType == "text/plain") is not TextPart body)
+            {
+                Logger?.Error("Could not find a plain version of the email");
                 return null;
-            var code = SteamAuthCode().Match(body.Text)?.Groups?["code"];
-            if (code?.Success != true)
+            }
+
+            var matchText = Regex.Replace(body.Text, @"\r\n?|\n", " ");
+            var match = regex.Match(matchText);
+            var code = match.Groups["code"];
+            if (!match.Success || !code.Success)
+            {
+                Logger?.Error("Could not find the code");
                 return null;
-            Logger?.Info("Extracted the Steam Auth Code: {0}", code.Value);
+            }
+
+            Logger?.Info("Extracted the {0}: {1}", codeName, code.Value);
             return code.Value;
         }
 
@@ -88,7 +118,14 @@ namespace FLB_API.Managers
             Client.Disconnected += (_, e) => Logger?.Info("Disconnected from IMAP");
         }
 
+        public static Regex GetSteamRegEx() => SteamAuthCode();
+
+        public static Regex GetModIoRegEx() => ModIoAuthCode();
+
         [GeneratedRegex("Login Code\\n(?'code'.*)", RegexOptions.Multiline)]
         private static partial Regex SteamAuthCode();
+
+        [GeneratedRegex("age or older:  (?'code'[A-Z0-9]{5})", RegexOptions.Multiline)]
+        private static partial Regex ModIoAuthCode();
     }
 }

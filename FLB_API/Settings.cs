@@ -8,23 +8,14 @@ namespace FLB_API
         [JsonPropertyName("interval")]
         public int Interval { get; set; }
 
-        [JsonPropertyName("modio_token")]
-        public string? ModIoToken { get; set; }
-
-        [JsonPropertyName("modio_pat")]
-        public string? ModIoPersonalAccessToken { get; set; }
+        [JsonPropertyName("modio")]
+        public ModIoSettings? ModIo { get; set; }
 
         [JsonPropertyName("steam_token")]
         public string? SteamWebApiToken { get; set; }
 
         [JsonPropertyName("discord_bot_token")]
         public string? DiscordBotToken { get; set; }
-
-        [JsonPropertyName("thumbnail_cache_expire_time")]
-        public ulong? ThumbnailCacheExpireTime { get; set; } = 30 * 60;
-
-        [JsonPropertyName("thumbnail_cleanup_interval")]
-        public int? ThumbnailCleanupInterval { get; set; } = 60 * 60;
 
         [JsonPropertyName("preferences")]
         public Preferences? Preferences { get; set; } = new();
@@ -34,6 +25,42 @@ namespace FLB_API
 
         [JsonPropertyName("imap")]
         public ImapAuth? Imap { get; set; } = new();
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    public class ModIoSettings
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("auth")]
+        public ModIoAuth? Auth { get; set; }
+
+        [JsonPropertyName("token")]
+        public Token? Token { get; set; }
+
+        [JsonPropertyName("account_token")]
+        public Token? AccountToken { get; set; }
+
+        // Collections require a separate token
+        [JsonPropertyName("personal_access_token")]
+        public string? PersonalAccessToken { get; set; }
+
+        [JsonPropertyName("cache_expire_time")]
+        public ulong? CacheExpireTime { get; set; } = 30 * 60;
+
+        [JsonPropertyName("cleanup_interval")]
+        public int? CleanupInterval { get; set; } = 60 * 60;
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    public class ModIoAuth
+    {
+        [JsonPropertyName("email")]
+        public string? Email { get; set; }
+
+        [JsonPropertyName("auto_reauthenticate")]
+        public bool Use { get; set; }
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -87,5 +114,31 @@ namespace FLB_API
 
         [JsonPropertyName("authHandler")]
         public string AuthHandler { get; set; } = "STEAMKIT";
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    public class Token
+    {
+        [JsonPropertyName("token")]
+        public string? Content { get; set; }
+
+        [JsonPropertyName("expire_time")]
+        public long ExpireTime { get; set; }
+
+        public override string ToString()
+            => Content ?? string.Empty;
+
+        [JsonConstructor]
+        public Token()
+        {
+        }
+
+        public Token(string token, long expireTime)
+        {
+            Content = token;
+            ExpireTime = expireTime;
+        }
+
+        public bool IsValid() => !string.IsNullOrWhiteSpace(Content) && Content != "your-token" && (ExpireTime == -1 || DateTimeOffset.Now.ToUnixTimeSeconds() < ExpireTime);
     }
 }

@@ -48,7 +48,19 @@ namespace FLB_API
         internal static Settings DefaultSettings { get; } = new()
         {
             Interval = 30,
-            ModIoToken = "your-token",
+            ModIo = new ModIoSettings()
+            {
+                PersonalAccessToken = "your-token",
+                Token = new Token("your-token", -1),
+                AccountToken = new Token("your-token", -1),
+                CacheExpireTime = 30 * 60,
+                CleanupInterval = 60 * 60,
+                Auth = new ModIoAuth
+                {
+                    Email = "",
+                    Use = false
+                }
+            },
             Authentication = new Auth()
             {
                 Username = "",
@@ -80,59 +92,7 @@ namespace FLB_API
 
             try
             {
-                LoadSettings();
-
-                ILogger.LogLevel level;
-                string choice;
-                var preferences = false;
-
-                if (Settings?.Preferences?.Use == true)
-                {
-                    preferences = true;
-                    Logger?.Information("Using saved preferences");
-                    level = Settings.Preferences.LogLevel;
-                    choice = Settings.Preferences.AuthHandler;
-                    Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
-                }
-                else
-                {
-                    var choices = await AskUser();
-                    level = choices.Item1;
-                    choice = choices.Item2;
-                }
-
-                if (!preferences && Settings?.Preferences?.Use != false)
-                {
-                    var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
-                    if (answer && Settings != null)
-                        await SavePreferences(level, choice);
-                }
-
-                Dictionary<string, string> metadata = [];
-
-                Fusion steamClient;
-                if (choice.StartsWith("SteamKit"))
-                {
-                    steamClient = new Fusion(new SteamKitHandler());
-                    metadata = await SetupSteamKit(steamClient);
-                }
-                else
-                {
-                    Logger?.Information("Connecting with Steamworks");
-                    steamClient = new Fusion(new SteamworksHandler());
-                }
-
-                Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, metadata));
-                Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
-
-                Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, []));
-                Logger?.Information("Successfully initialized EOS API");
-
-                ThumbnailManager.Logger = new Logger(level, "ModIO");
-
-                Uptime = DateTime.UtcNow;
-                Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
-                await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
+                await Setup();
             }
             catch (Exception e)
             {
@@ -239,12 +199,71 @@ namespace FLB_API
             var token = new CancellationTokenSource();
             _ = GetLobbies(token.Token);
 
-            _ = ThumbnailManager.Setup();
-
             await app.RunAsync();
 
             await token.CancelAsync();
             token.Dispose();
+        }
+
+        private static async Task Setup()
+        {
+            LoadSettings();
+            ILogger.LogLevel level;
+            string choice;
+            var preferences = false;
+
+            // TODO: add setup screen
+            if (Settings?.Preferences?.Use == true)
+            {
+                preferences = true;
+                Logger?.Information("Using saved preferences");
+                level = Settings.Preferences.LogLevel;
+                choice = Settings.Preferences.AuthHandler;
+                Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
+            }
+            else
+            {
+                var choices = await AskUser();
+                level = choices.Item1;
+                choice = choices.Item2;
+            }
+
+            if (!preferences && Settings?.Preferences?.Use != false)
+            {
+                var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
+                if (answer && Settings != null)
+                    await SavePreferences(level, choice);
+            }
+
+            Dictionary<string, string> metadata = [];
+
+            Fusion steamClient;
+            bool isSteamKit = choice.StartsWith("SteamKit");
+            if (isSteamKit)
+            {
+                steamClient = new Fusion(new SteamKitHandler());
+                metadata = await SetupSteamKit(steamClient);
+            }
+            else
+            {
+                Logger?.Information("Connecting with Steamworks");
+                steamClient = new Fusion(new SteamworksHandler());
+            }
+
+            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, !isSteamKit, metadata));
+            Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
+
+            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, true, []));
+            Logger?.Information("Successfully initialized EOS API");
+
+            ThumbnailManager.Logger = new Logger(level, "ModIO");
+
+            if (Settings?.ModIo?.Enabled != false)
+                await ThumbnailManager.Setup();
+
+            Uptime = DateTime.UtcNow;
+            Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
+            await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
         }
 
         public static string ReplaceRegex(this string text, string pattern, string replacement)
@@ -435,14 +454,8 @@ namespace FLB_API
                 {
                     logger?.Info("Using IMAP to fetch Steam Auth Code...");
                     await Task.Delay((int)3.5f * 1000);
-                    ImapManager ??= new IMAPManager(
-                        Settings!.Imap!.Host!,
-                        Settings.Imap.Port,
-                        logger
-                        );
-
-                    ImapManager.LogIn(Settings!.Imap!.Username!, Settings!.Imap!.Password!);
-                    var code = await ImapManager.GetCodeAsync();
+                    ImapManager ??= new IMAPManager(Settings!.Imap!, logger, true);
+                    var code = await ImapManager.GetCodeAsync(IMAPManager.GetSteamRegEx());
                     if (string.IsNullOrWhiteSpace(code))
                     {
                         logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
@@ -462,7 +475,7 @@ namespace FLB_API
             }
         }
 
-        private static bool ImapEmpty()
+        public static bool ImapEmpty()
             => string.IsNullOrWhiteSpace(Settings?.Imap?.Host) ||
                string.IsNullOrWhiteSpace(Settings?.Imap?.Username) ||
                string.IsNullOrWhiteSpace(Settings?.Imap?.Password);
@@ -492,6 +505,25 @@ namespace FLB_API
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to set settings from file");
+            }
+        }
+
+        public static void SaveSettings()
+        {
+            try
+            {
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                Logger?.Information("Saving settings");
+                using var stream = File.CreateText(path);
+                var serialized = JsonSerializer.Serialize(Settings);
+                stream.Write(serialized);
+                stream.Flush();
+                stream.Close();
+                Logger?.Information("Successfully saved settings!");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to save settings to file");
             }
         }
 
