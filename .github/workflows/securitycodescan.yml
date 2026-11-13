@@ -37,10 +37,15 @@ jobs:
       - name: "Setup MSBuild"
         uses: microsoft/setup-msbuild@v3
 
-      - name: "Setup DotNet"
+      - name: "Setup .NET 3"
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '3.1.x'
+
+      - name: "Setup .NET 11"
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
 
       - name: Setup projects for analysis
         uses: security-code-scan/security-code-scan-add-action@v1
