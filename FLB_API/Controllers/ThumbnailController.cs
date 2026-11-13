@@ -79,8 +79,9 @@ namespace FLB_API.Controllers
         [EndpointSummary("Get the thumbnail of a specified mod from ModIO, you can also get the thumbnails of vanilla levels/avatars if you provide the barcode")]
         [ProducesResponseType<FileStreamResult>(200, "image/png", Description = "Returns the thumbnail of the specified mod or vanilla level/avatar")]
         [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "The provided mod id is invalid or missing.")]
-        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server has encountered an error while fetching the thumbnail")]
         [ProducesResponseType<ProblemDetails>(404, contentType: "application/problem+json", Description = "Thumbnail was not found, most often occurs when the mod is unlisted")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "The server has encountered an error while fetching the thumbnail")]
+        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "The requested thumbnail was from mod.io, while the server has the fetching from the external source disabled")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "modId")][Description("ID of the mod for which to get the thumbnail")][Required] string modId,
             [FromQuery(Name = "barcode")][Description("The barcode of the avatar/level you want to get the thumbnail of, include when possible for more successful requests")] string barcode = "")
@@ -95,6 +96,9 @@ namespace FLB_API.Controllers
             MemoryThumbnail? thumbnail;
             if (modIdNum != -1 || string.IsNullOrWhiteSpace(barcode) || !Vanilla.TryGetValue(barcode, out var fileName))
             {
+                if (Program.Settings?.ModIo?.Enabled == false)
+                    return Problem("The server does not support fetching mod.io thumbnails as the functionality has been disabled by the person hosting", statusCode: 501, title: "Feature Disabled");
+
                 try
                 {
                     thumbnail = await ThumbnailManager.GetModThumbnail(modIdNum, barcode);

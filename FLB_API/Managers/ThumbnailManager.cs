@@ -49,17 +49,18 @@ namespace FLB_API.Managers
             }
 
             Logger?.Info("Ensuring token is valid...");
-            if (!string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) && Program.Settings.ModIoToken != "your-token")
+            if (Program.Settings?.ModIo?.Token?.IsValid() == true)
             {
                 Logger?.Info("Token is provided, making sample request to API");
+                // I hope this mod does NOT get randomly nuked from the face of mod.io, i believe in you
                 using var request = new HttpRequestMessage(HttpMethod.Get,
                     $"https://g-{GameId}.modapi.io/v1/games/{GameId}/mods/4067166");
-                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings?.ModIo?.Token}");
                 request.Headers.Add("Accept", "application/json");
                 using var response = await HttpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    Logger?.Error($"Token is not valid, re-authenticating...");
+                    Logger?.Error("Token is not valid, re-authenticating...");
                     await Authenticate();
                 }
                 else
@@ -86,7 +87,7 @@ namespace FLB_API.Managers
             {
                 while (true)
                 {
-                    await Task.Delay((Program.Settings?.ThumbnailCleanupInterval ?? (60 * 60)) * 1000);
+                    await Task.Delay((Program.Settings?.ModIo?.CleanupInterval ?? (60 * 60)) * 1000);
                     int count;
                     lock (Lock) count = Thumbnails.Count;
                     Logger?.Info("Starting cleanup process! Processing {0} thumbnails...", count);
@@ -127,8 +128,8 @@ namespace FLB_API.Managers
         {
             if (IsAuthenticating)
             {
-                if (!string.IsNullOrWhiteSpace(Program.Settings?.ModIoAccountToken)) return;
-                Logger?.Info("No account token provided, please log in using the following URL: {0}", AuthCode.LoginUrl);
+                if (Program.Settings?.ModIo?.AccountToken?.IsValid() == true || Program.Settings?.ModIo?.Auth?.Use == true) return;
+                Logger?.Info("No account token provided, please log in using the following URL: {0}", AuthCode.LoginUrl ?? "N/A");
                 Logger?.Info("You have until {0} to log in!", DateTimeOffset.FromUnixTimeSeconds(AuthCode.DateExpires));
 
                 return;
@@ -151,28 +152,54 @@ namespace FLB_API.Managers
                 var initialMessage = JsonSerializer.Deserialize<WebSocketMessages>(res);
                 var first = initialMessage?.Messages?.FirstOrDefault();
                 if (first?.Operation == "device_login" &&
-                    first?.Context.TryGetProperty("login_url", out var url) == true)
+                    first?.Context.TryGetProperty("login_url", out _) == true)
                 {
                     var context = first.Context.Deserialize<DeviceLoginInitialResponseContext>();
                     AuthCode = context;
+                    if (string.IsNullOrWhiteSpace(context.Code))
+                    {
+                        Logger?.Error("Provided code from the WebSocket is empty.");
+                        return;
+                    }
                     Logger?.Info("Logging in using code {0}", context.Code);
 
-                    if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoAccountToken))
+                    var dontSendReq = false;
+
+                    if (Program.Settings?.ModIo?.AccountToken?.IsValid() != true)
                     {
-                        Logger?.Info("No account token provided, please log in using the following URL: {0}",
-                            context.LoginUrl);
-                        Logger?.Info("You have until {0} to log in!",
-                            DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
-                    }
-                    else
-                    {
-                        if (!await SendAuthReq(context.Code))
+                        var manual = true;
+                        if (Program.Settings?.ModIo?.Auth?.Use == true)
                         {
-                            Logger?.Error(
-                                "Failed to authenticate with the provided code. Ensure that the account token is correct!");
-                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                            return;
+                            Logger?.Info("Account token not provided or has expired, attempting to log in");
+                            var success = await LogIn();
+                            if (!success)
+                            {
+                                Logger?.Error(
+                                    "Failed to log in with the provided credentials. Manual login required.");
+                            }
+                            else
+                            {
+                                manual = false;
+                            }
                         }
+
+                        if (manual)
+                        {
+                            dontSendReq = true;
+                            Logger?.Info(
+                                "No account token provided or has expired, please log in using the following URL: {0}",
+                                context.LoginUrl ?? "N/A");
+                            Logger?.Info("You have until {0} to log in!",
+                                DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
+                        }
+                    }
+
+                    if (!dontSendReq && !await SendAuthReq(context.Code))
+                    {
+                        Logger?.Error(
+                            "Failed to authenticate with the provided code. Ensure that the account token is correct!");
+                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                        return;
                     }
 
                     var aBytes = ArrayPool<byte>.Shared.Rent(4096);
@@ -181,16 +208,16 @@ namespace FLB_API.Managers
                     var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
                     var authFirst = aMessage?.Messages?.FirstOrDefault();
 
-                    if (authFirst?.Operation != "login_success" ||
-                        authFirst?.Context.TryGetProperty("access_token", out var token) != true)
+                    if (authFirst is not { Operation: "login_success" } ||
+                        authFirst?.Context.TryGetProperty("access_token", out _) != true)
                     {
                         await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
                     }
 
-                    var finalContext = authFirst.Context.Deserialize<DeviceLoginFinalResponseContext>();
+                    var finalContext = authFirst!.Context.Deserialize<DeviceLoginFinalResponseContext>();
                     Logger?.Info("Successfully authenticated! Token expires at {0}",
                         DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
-                    Program.Settings?.ModIoToken = finalContext.AccessToken;
+                    Program.Settings?.ModIo?.Token = new Token(finalContext.AccessToken!, finalContext.DateExpires);
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
                 }
             }
@@ -200,11 +227,88 @@ namespace FLB_API.Managers
             }
         }
 
+        private static async Task<bool> LogIn()
+        {
+            var email = Program.Settings?.ModIo?.Auth?.Email;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                Logger?.Warning("No email provided for Mod.io login.");
+                return false;
+            }
+
+            if (Program.ImapEmpty())
+            {
+                Logger?.Warning("IMAP is not configured for Mod.io login.");
+                return false;
+            }
+
+            Logger?.Info("Sending request for OTP");
+            using var request =
+                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/emailrequest");
+            request.Headers.Add("Accept", "application/json");
+            var body = new List<KeyValuePair<string, string>> { new("email", email) };
+            request.Content = new FormUrlEncodedContent(body);
+            using var response = await HttpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    Logger?.Warning("Too many requests to the email endpoint. Retrying in 5 minutes...");
+                    await Task.Delay(5 * 60 * 1000);
+                    return await LogIn();
+                }
+                Logger?.Error("Failed to request email authentication ({0})", response.StatusCode);
+                Logger?.Error("Body: {0}", await response.Content.ReadAsStringAsync());
+                return false;
+            }
+
+            Logger?.Info("OTP sent successfully, waiting for code...");
+            var imap = new IMAPManager(Program.Settings!.Imap!, Logger, true);
+            await Task.Delay((int)3.5f * 1000);
+            var code = await imap.GetCodeAsync(IMAPManager.GetModIoRegEx(), "Mod.io Auth Code", IMAPManager.MODIO_SUBJECT);
+
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                Logger?.Error("Failed to fetch authentication code from email");
+                return false;
+            }
+
+            Logger?.Info("Successfully fetched code: {0}", code);
+            Logger?.Info("Logging in to retrieve account token");
+
+            using var exchangeRequest =
+                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/emailexchange");
+            exchangeRequest.Headers.Add("Accept", "application/json");
+            var exchangeBody = new List<KeyValuePair<string, string>> { new("code", code) };
+            exchangeRequest.Content = new FormUrlEncodedContent(exchangeBody);
+            using var exchangeResponse = await HttpClient.SendAsync(request);
+
+            if (!exchangeResponse.IsSuccessStatusCode)
+            {
+                Logger?.Error("Failed to log in ({0})", response.StatusCode);
+                Logger?.Error("Body: {0}", await response.Content.ReadAsStringAsync());
+                return false;
+            }
+
+            var json = JsonSerializer.Deserialize<JsonDocument>(await exchangeResponse.Content.ReadAsStringAsync());
+            if (json == null)
+            {
+                Logger?.Error("Could not deserialize the JSON response");
+                return false;
+            }
+            Logger?.Info("Successfully logged in as {0}!", json.RootElement.GetProperty("user").GetProperty("info").GetProperty("display_name").GetString() ?? "N/A");
+            Logger?.Info("Token is valid until {0}", DateTimeOffset.FromUnixTimeSeconds(json.RootElement.GetProperty("date_expires").GetInt64()));
+
+            Program.Settings?.ModIo?.AccountToken = new Token(json.RootElement.GetProperty("access_token").GetString() ?? string.Empty, json.RootElement.GetProperty("date_expires").GetInt64());
+
+            return true;
+        }
+
         private static async Task<bool> SendAuthReq(string code)
         {
             using var request =
                 new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/device/connect");
-            request.Headers.Add("Authorization", $"Bearer {Program.Settings?.ModIoAccountToken}");
+            request.Headers.Add("Authorization", $"Bearer {Program.Settings?.ModIo?.AccountToken}");
             request.Headers.Add("Accept", "application/json");
             var body = new List<KeyValuePair<string, string>> { new("code", code) };
             request.Content = new FormUrlEncodedContent(body);
@@ -217,14 +321,15 @@ namespace FLB_API.Managers
         {
             Logger?.Info("Remotely fetching mod thumbnail for {0}", modId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoToken) || Program.Settings.ModIoToken == "your-token")
+            if (Program.Settings?.ModIo?.Token?.IsValid() != true)
             {
-                Logger?.Warning("Mod.io token is not set. Cannot fetch remote mod thumbnail.");
+                Logger?.Warning("Mod.io token is invalid or has expired. Cannot fetch remote mod thumbnail. Attempting to re-authenticate...");
+                _ = Task.Run(Authenticate);
                 return null;
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/mods/{modId}");
-            request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoToken}");
+            request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIo.Token}");
             request.Headers.Add("Accept", "application/json");
             using var response = await HttpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
@@ -240,14 +345,14 @@ namespace FLB_API.Managers
             if (json.TryGetProperty("logo", out var logoElement))
                 thumbnail = logoElement.GetProperty("thumb_320x180").GetString();
 
-            return thumbnail is null ? null : new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ThumbnailCacheExpireTime ?? 30 * 60)), maturity);
+            return thumbnail is null ? null : new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ModIo?.CacheExpireTime ?? 30 * 60)), maturity);
         }
 
         public static async Task FetchAvatarsFromCollection()
         {
             Logger?.Info("Getting avatars from collection {0}", CollectionId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIoPersonalAccessToken) || Program.Settings.ModIoPersonalAccessToken == "your-token")
+            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIo?.PersonalAccessToken))
             {
                 Logger?.Warning("Mod.io personal access token is not set. Cannot fetch mods.");
                 return;
@@ -261,7 +366,7 @@ namespace FLB_API.Managers
             {
                 Logger?.Info("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/collections/{CollectionId}/mods?_offset={offset}");
-                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIoPersonalAccessToken}");
+                request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIo.PersonalAccessToken}");
                 request.Headers.Add("Accept", "application/json");
                 using var response = await HttpClient.SendAsync(request);
                 var body = await response.Content.ReadAsStringAsync();
@@ -367,7 +472,7 @@ namespace FLB_API.Managers
         }
 
         private static bool IsThumbnailValid(this MemoryThumbnail item)
-            => item.ExpireTime == null || (DateTimeOffset.Now - item.ExpireTime.Value).TotalSeconds < (long)(Program.Settings?.ThumbnailCacheExpireTime ?? (30 * 60));
+            => item.ExpireTime == null || (DateTimeOffset.Now - item.ExpireTime.Value).TotalSeconds < (long)(Program.Settings?.ModIo?.CacheExpireTime ?? (30 * 60));
 
         private static MemoryThumbnail? GetWithBarcode(string? barcode)
         {
@@ -595,7 +700,7 @@ namespace FLB_API.Managers
     public struct DeviceLoginInitialResponseContext()
     {
         [JsonPropertyName("code")]
-        public string Code { get; set; }
+        public string? Code { get; set; }
 
         [JsonPropertyName("login_url")]
         public string? LoginUrl { get; set; }

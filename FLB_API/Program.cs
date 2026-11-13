@@ -48,7 +48,19 @@ namespace FLB_API
         internal static Settings DefaultSettings { get; } = new()
         {
             Interval = 30,
-            ModIoToken = "your-token",
+            ModIo = new ModIoSettings()
+            {
+                PersonalAccessToken = "your-token",
+                Token = new Token("your-token", -1),
+                AccountToken = new Token("your-token", -1),
+                CacheExpireTime = 30 * 60,
+                CleanupInterval = 60 * 60,
+                Auth = new ModIoAuth
+                {
+                    Email = "",
+                    Use = false
+                }
+            },
             Authentication = new Auth()
             {
                 Username = "",
@@ -130,7 +142,8 @@ namespace FLB_API
 
                 ThumbnailManager.Logger = new Logger(level, "ModIO");
 
-                await ThumbnailManager.Setup();
+                if (Program.Settings?.ModIo?.Enabled != false)
+                    await ThumbnailManager.Setup();
 
                 Uptime = DateTime.UtcNow;
                 Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
@@ -435,14 +448,8 @@ namespace FLB_API
                 {
                     logger?.Info("Using IMAP to fetch Steam Auth Code...");
                     await Task.Delay((int)3.5f * 1000);
-                    ImapManager ??= new IMAPManager(
-                        Settings!.Imap!.Host!,
-                        Settings.Imap.Port,
-                        logger
-                        );
-
-                    ImapManager.LogIn(Settings!.Imap!.Username!, Settings!.Imap!.Password!);
-                    var code = await ImapManager.GetCodeAsync();
+                    ImapManager ??= new IMAPManager(Settings!.Imap!, logger, true);
+                    var code = await ImapManager.GetCodeAsync(IMAPManager.GetSteamRegEx());
                     if (string.IsNullOrWhiteSpace(code))
                     {
                         logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
@@ -462,7 +469,7 @@ namespace FLB_API
             }
         }
 
-        private static bool ImapEmpty()
+        public static bool ImapEmpty()
             => string.IsNullOrWhiteSpace(Settings?.Imap?.Host) ||
                string.IsNullOrWhiteSpace(Settings?.Imap?.Username) ||
                string.IsNullOrWhiteSpace(Settings?.Imap?.Password);
