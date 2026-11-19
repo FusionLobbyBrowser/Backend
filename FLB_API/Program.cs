@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -486,6 +487,7 @@ namespace FLB_API
                 {
                     try
                     {
+                        Stopwatch stopwatch = Stopwatch.StartNew();
                         List<CustomLobbyInfo> friendsOnly = [];
                         List<Task<CustomLobbyInfo[]>> platforms = [];
                         Platforms.ForEach(x => platforms.Add(x.FetchLobbies()));
@@ -503,7 +505,9 @@ namespace FLB_API
                         FriendsOnlyLobbies = await CreateResponse([.. friendsOnly], latest?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
                         Lobbies = await CreateResponse([.. allLobbies], latest?.Client?.Handler?.LastFetch ?? Uptime, Settings?.Interval ?? 30);
 
+                        stopwatch.Stop();
                         Logger?.Information("Combined all available lobbies ({0})", Lobbies.Lobbies.Length);
+                        Logger?.Information("Fetching lobbies took {0}ms", stopwatch.ElapsedMilliseconds);
                         await HandleDiscordBot();
                         LoadSettings();
                     }
@@ -528,7 +532,7 @@ namespace FLB_API
             }
             else
             {
-                if (Settings?.Discord?.Enabled == true)
+                if (Settings?.Discord?.Enabled == true && Options?.DisableDiscord != true)
                 {
                     Logger?.Information("Setting up discord bot");
                     _ = DiscordBotManager.Setup();

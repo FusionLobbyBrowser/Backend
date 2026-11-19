@@ -19,7 +19,7 @@ namespace FusionAPI.Handlers
 
         public bool IsInitialized => Runtime?.IsInitialized ?? false;
 
-        public bool SupportsFriendsOnly { get; } = true;
+        public bool SupportsFriendsOnly { get; } = false;
 
         internal EpicRuntime? Runtime { get; private set; }
 

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 
 using FLB_API.Managers;
 
@@ -55,12 +56,19 @@ namespace FLB_API
         }
 
         public async Task<CustomLobbyInfo[]> FetchLobbies()
+            => await FetchLobbies(null);
+
+        internal async Task<CustomLobbyInfo[]> FetchLobbies(Stopwatch? stopwatch = null)
         {
+            stopwatch ??= Stopwatch.StartNew();
             if (Client?.Handler?.IsInitialized == true)
             {
                 Lobbies = await Program.CreateResponse(await Internal_FetchLobbies() ?? [],
                     Client.Handler.LastFetch, Program.Settings?.Interval ?? 30);
-                return (Client.Handler.SupportsFriendsOnly ? await Internal_FetchLobbies(true) : []) ?? [];
+                var friendsOnly = (Client.Handler.SupportsFriendsOnly ? await Internal_FetchLobbies(true) : []) ?? [];
+                stopwatch.Stop();
+                Logger?.Info("Total time it took to fetch the public and friends-only lobbies: {0}ms", stopwatch.ElapsedMilliseconds);
+                return friendsOnly;
             }
             else
             {
@@ -76,7 +84,7 @@ namespace FLB_API
                     if (Client?.Handler?.IsInitialized == true)
                     {
                         Logger?.Info("Client re-initialized successfully.");
-                        return await FetchLobbies();
+                        return await FetchLobbies(stopwatch);
                     }
                     else
                     {
@@ -94,6 +102,7 @@ namespace FLB_API
             if (Client == null)
                 return [];
 
+            var stopwatch = Stopwatch.StartNew();
             Logger?.Info($"Fetching lobbies... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
             LobbyInfo[] lobbies;
             try
@@ -110,7 +119,8 @@ namespace FLB_API
             }
 
             var filtered = (await lobbies.Select(x => x.Convert()).Where(async x => Program.Blacklist == null || await Program.Blacklist.IsAllowed(x))).ToArray();
-            Logger?.Info($"Successfully fetched lobbies ({filtered.Length} -> {lobbies.Length - filtered.Length} filtered out)... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
+            stopwatch.Stop();
+            Logger?.Info($"Successfully fetched lobbies ({stopwatch.ElapsedMilliseconds}ms) ({filtered.Length} -> {lobbies.Length - filtered.Length} filtered out)... {(friendsOnly ? "(Friends Only)" : "(Public)")}");
 
             return [.. filtered];
         }

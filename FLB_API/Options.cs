@@ -15,5 +15,8 @@ namespace FLB_API
 
         [Option("setup", Required = false, HelpText = "Start the setup process regardless of whether the configuration has already been set up")]
         public bool Setup { get; set; } = false;
+
+        [Option("no-discord", Required = false, HelpText = "Prevents the discord bot from being initialized ")]
+        public bool DisableDiscord { get; set; } = false;
     }
 }
