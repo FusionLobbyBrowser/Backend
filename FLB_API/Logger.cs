@@ -1,5 +1,7 @@
 ﻿using Spectre.Console;
 
+using static AspNet.Security.OpenId.OpenIdAuthenticationConstants;
+
 using ILogger = FusionAPI.Data.Interfaces.ILogger;
 using LogLevel = FusionAPI.Data.Interfaces.ILogger.LogLevel;
 
@@ -75,6 +77,82 @@ namespace FLB_API
         {
             var msg = string.Format(message, args);
             return FormatPrefix() + msg;
+        }
+
+        private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $"[[{Prefix}]] " : string.Empty)}";
+    }
+
+    public class SpectreLogger(LogLevel level, string prefix) : ILogger
+    {
+        public LogLevel Level { get; set; } = level;
+
+        public string Prefix { get; set; } = prefix;
+
+        public SpectreLogger() : this(LogLevel.Info, string.Empty)
+        {
+        }
+
+        public SpectreLogger(LogLevel level) : this(level, string.Empty)
+        {
+        }
+
+        public SpectreLogger(string prefix) : this(LogLevel.Info, prefix)
+        {
+        }
+
+        public void Error(string message, params object[] args)
+        {
+            if (Level > LogLevel.Error)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+        }
+
+        public void Error(string message, Exception ex, params object[] args)
+        {
+            if (Level > LogLevel.Error)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+            AnsiConsole.WriteException(ex);
+        }
+
+        public void Info(string message, params object[] args)
+        {
+            if (Level > LogLevel.Info)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+        }
+
+        public void Debug(string message, params object[] args)
+        {
+            if (Level > LogLevel.Debug)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+        }
+
+        public void Trace(string message, params object[] args)
+        {
+            if (Level > LogLevel.Trace)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+        }
+
+        public void Warning(string message, params object[] args)
+        {
+            if (Level > LogLevel.Warning)
+                return;
+
+            AnsiConsole.MarkupLine(Format(message, args));
+        }
+
+        private string Format(string message, params object[] args)
+        {
+            var msg = string.Format(message, args);
+            return " -> " + FormatPrefix() + msg;
         }
 
         private string FormatPrefix() => $"{(!string.IsNullOrWhiteSpace(Prefix) ? $"[[{Prefix}]] " : string.Empty)}";

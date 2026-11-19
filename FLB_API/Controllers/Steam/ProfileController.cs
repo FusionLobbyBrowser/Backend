@@ -25,13 +25,17 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam profile of a specified user")]
         [ProducesResponseType<JsonPlayerSummaryModel>(200, "application/json", Description = "Returns the Steam profile of the specified user")]
-        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "Backend is not set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "Backend is not properly set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "Feature is disabled")]
         [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Invalid Steam ID, must be a number or the Steam API returned no profile for the specified ID")]
         public async Task<IActionResult> Get(
             [FromRoute(Name = "steamId")][Description("Steam ID of the user you want to get the profile of")][Required] string steamId)
         {
-            if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Problem("Backend is not set up for using Steam API!", statusCode: 500, title: "Not Set Up");
+            if (Program.Settings?.Steam?.WebApi?.Enabled == false)
+                return Problem("The server does not support fetching Steam profiles as the functionality has been disabled by the person hosting", statusCode: 501, title: "Feature Disabled");
+
+            if (Program.Settings?.Steam?.WebApi?.IsValid() != true)
+                return Problem("Backend is not properly set up for using Steam Web API!", statusCode: 500, title: "Not Set Up");
 
             if (!ulong.TryParse(steamId, out var id))
                 return Problem("Invalid Steam ID was provided, must be a number!", statusCode: 400, title: "Invalid ID");
@@ -54,7 +58,7 @@ namespace FLB_API.Controllers.Steam
                     return cache;
             }
 
-            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebApiToken);
+            var factory = new SteamWebInterfaceFactory(Program.Settings!.Steam!.WebApi!.WebToken);
             var user = factory.CreateSteamWebInterface<SteamUser>(HttpClient);
 
             var summaries = await user.GetPlayerSummariesAsync([id]);

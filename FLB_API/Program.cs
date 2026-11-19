@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
+using CommandLine;
+
 using FLB_API.Blacklist;
 using FLB_API.Discord;
 using FLB_API.Managers;
@@ -15,6 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
 
 using Serilog;
+using Serilog.Events;
 using Serilog.Sinks.Spectre;
 
 using Spectre.Console;
@@ -23,8 +26,10 @@ using ILogger = FusionAPI.Data.Interfaces.ILogger;
 
 namespace FLB_API
 {
-    public static class Program
+    public static partial class Program
     {
+        public const string Version = "1.0.0";
+
         internal static Serilog.Core.Logger? Logger { get; private set; }
 
         internal static LobbyListResponse? Lobbies { get; private set; }
@@ -45,38 +50,26 @@ namespace FLB_API
 
         internal static string CurrentDir => AppDomain.CurrentDomain.BaseDirectory;
 
-        internal static Settings DefaultSettings { get; } = new()
-        {
-            Interval = 30,
-            ModIo = new ModIoSettings()
-            {
-                PersonalAccessToken = "your-token",
-                Token = new Token("your-token", -1),
-                AccountToken = new Token("your-token", -1),
-                CacheExpireTime = 30 * 60,
-                CleanupInterval = 60 * 60,
-                Auth = new ModIoAuth
-                {
-                    Email = "",
-                    Use = false
-                }
-            },
-            Authentication = new Auth()
-            {
-                Username = "",
-                Password = "",
-            },
-            Imap = new ImapAuth()
-            {
-                Host = "imap.gmail.com",
-                Port = 993,
-                Username = "",
-                Password = ""
-            }
-        };
+        internal static JsonSerializerOptions JsonSettingsOptions { get; } = new() { WriteIndented = true };
+
+        public static Options? Options { get; private set; }
 
         public static async Task Main(string[] args)
         {
+            var parser = new Parser(with =>
+            {
+                with.CaseInsensitiveEnumValues = true;
+                with.AutoHelp = true;
+                with.AutoVersion = true;
+                with.HelpWriter = Console.Out;
+            });
+            var result = parser.ParseArguments<Options>(args);
+            if (result.Tag == ParserResultType.NotParsed)
+                return;
+
+            Options = result.Value;
+            WriteHeader();
+            AnsiConsole.WriteLine();
             var builder = WebApplication.CreateBuilder(args);
 
             if (!Directory.Exists(Path.Combine(CurrentDir, "Logs")))
@@ -84,7 +77,7 @@ namespace FLB_API
 
             Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
-                .WriteTo.Spectre()
+                .WriteTo.Spectre(restrictedToMinimumLevel: (LogEventLevel)(Options?.LogLevel ?? (Settings?.LogLevel ?? FusionAPI.Data.Interfaces.ILogger.LogLevel.Info)))
                 .WriteTo.File(Path.Combine(CurrentDir, "Logs", "log-.txt"), rollingInterval: RollingInterval.Day)
                 .CreateLogger();
 
@@ -134,11 +127,11 @@ namespace FLB_API
                                 { "timestamp", DateTime.UtcNow },
                             }
                         };
-                        await context.Response.WriteAsJsonAsync(details);
+                        await context.Response.WriteAsJsonAsync(details, CancellationToken.None);
                     };
                 })
 
-                .AddSteam(options => options.ApplicationKey = Settings?.SteamWebApiToken);
+                .AddSteam(options => options.ApplicationKey = Settings?.Steam?.WebApi?.WebToken);
 
             builder.Services.AddControllers().AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
             builder.Services.AddOpenApi(options => options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1);
@@ -208,37 +201,13 @@ namespace FLB_API
         private static async Task Setup()
         {
             LoadSettings();
-            ILogger.LogLevel level;
-            string choice;
-            var preferences = false;
-
-            // TODO: add setup screen
-            if (Settings?.Preferences?.Use == true)
-            {
-                preferences = true;
-                Logger?.Information("Using saved preferences");
-                level = Settings.Preferences.LogLevel;
-                choice = Settings.Preferences.AuthHandler;
-                Logger?.Information("Selected log level: {0}, Selected service: {1}", level.ToString(), choice);
-            }
-            else
-            {
-                var choices = await AskUser();
-                level = choices.Item1;
-                choice = choices.Item2;
-            }
-
-            if (!preferences && Settings?.Preferences?.Use != false)
-            {
-                var answer = await AnsiConsole.ConfirmAsync("[bold yellow]Would you like to save these settings to settings.json for next launch?[/]", true);
-                if (answer && Settings != null)
-                    await SavePreferences(level, choice);
-            }
+            if (Options?.Setup == true || (!Settings?.Setup ?? true))
+                await UserSetup();
 
             Dictionary<string, string> metadata = [];
 
             Fusion steamClient;
-            bool isSteamKit = choice.StartsWith("SteamKit");
+            var isSteamKit = string.Equals(Options?.SteamHandler ?? Settings?.Steam?.Handler, "SteamKit", StringComparison.OrdinalIgnoreCase);
             if (isSteamKit)
             {
                 steamClient = new Fusion(new SteamKitHandler());
@@ -250,20 +219,222 @@ namespace FLB_API
                 steamClient = new Fusion(new SteamworksHandler());
             }
 
-            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, level, !isSteamKit, metadata));
+            Platforms.Add(await Platform.CreateAndInit(steamClient, PlatformType.Steam, Settings?.LogLevel ?? ILogger.LogLevel.Info, !isSteamKit, metadata));
             Logger?.Information("Successfully initialized Steam Fusion API! Initializing EOS (Epic Online Services)...");
 
-            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, level, true, []));
+            Platforms.Add(await Platform.CreateAndInit(new Fusion(new EpicHandler()), PlatformType.Epic, Settings?.LogLevel ?? ILogger.LogLevel.Info, true, []));
             Logger?.Information("Successfully initialized EOS API");
 
-            ThumbnailManager.Logger = new Logger(level, "ModIO");
+            ThumbnailManager.Logger = new Logger(Settings?.LogLevel ?? ILogger.LogLevel.Info, "ModIO");
 
             if (Settings?.ModIo?.Enabled != false)
                 await ThumbnailManager.Setup();
 
             Uptime = DateTime.UtcNow;
-            Blacklist = new BlacklistManager(new Logger(level, "Blacklist"));
+            Blacklist = new BlacklistManager(new Logger(Settings?.LogLevel ?? ILogger.LogLevel.Info, "Blacklist"));
             await Blacklist.RegisterFromAssembly(typeof(Program).Assembly);
+        }
+
+        private static readonly List<CredentialStep> steps =
+        [
+            new("Discord", "cyan", async () =>
+            {
+                AnsiConsole.MarkupLine("First, we need to set up the Discord Bot. Please provide the bot token.");
+                AnsiConsole.MarkupLine("To get a bot token, you will need to [lightgreen]create[/] a bot on the Discord Developer Portal ([link=https://discord.com/developers/applications]https://discord.com/developers/applications[/]) and copy the token from the Bot section");
+                AnsiConsole.MarkupLine("Note: For the bot to work properly, it needs to have the necessary permissions: 4503876653074432 (this is a bot permission integer)");
+                var discordPrompt =
+                    new TextPrompt<string>(
+                            $" -> Discord Bot Token {Markup.Escape("[type 'disable' if you do not wish to use the discord bot]")}")
+                        .Validate((
+                            prompt) => TokenUtils.TryValidateToken(prompt) || prompt == "disable" ? ValidationResult.Success() : ValidationResult.Error("[red]The contents of the token are invalid! Provide a valid one or disable the feature.[/]"))
+                        .DefaultValue(Settings?.Discord?.IsValid() == true ? Settings?.Discord?.Token! : "disable");
+
+                var discordToken = await AnsiConsole.PromptAsync(discordPrompt);
+                if (discordToken == "disable")
+                {
+                    Settings?.Discord?.Enabled = false;
+                    Settings?.Discord?.Token = "disable";
+                    AnsiConsole.MarkupLine($"First feature [red]disabled[/]! Let's see how many others will suffer a fate like this");
+                }
+                else
+                {
+                    Settings?.Discord?.Enabled = true;
+                    Settings?.Discord?.Token = discordToken;
+                    AnsiConsole.MarkupLine($"Onto the next one!");
+                }
+            }, () => Settings?.Discord?.Enabled == true && TokenUtils.TryValidateToken(Settings?.Discord?.Token ?? string.Empty)),
+            new("SteamKit", "IndianRed1", async () =>
+            {
+                AnsiConsole.MarkupLine("If you wish to use SteamKit, you will need to provide the necessary credentials. Enter the username and password to a Steam account. Any will do, you can create one just for this");
+                AnsiConsole.MarkupLine("Do note that to allow for a more seamless experience without any user input, you will need to input your email credentials so choose the email for the steam account wisely (preferably a Gmail one)");
+                AnsiConsole.MarkupLine("If you wish to use only Steamworks, just put anything here");
+                var username = await AskAsync<string>(" -> Username", Settings?.Steam?.SteamKitAuth?.Username ?? null);
+                var passView = new TextPrompt<string>(" -> Password").Secret('*');
+                if(!string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Password))
+                    passView = passView.DefaultValue(Settings?.Steam?.SteamKitAuth?.Password ?? string.Empty);
+                var password = await AnsiConsole.PromptAsync(passView);
+
+                Settings?.Steam?.SteamKitAuth?.Username = username;
+                Settings?.Steam?.SteamKitAuth?.Password = password;
+            }, () => !string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Username) && !string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Password)),
+            new("Steam Web API", "LightCyan3", async () =>
+            {
+                AnsiConsole.MarkupLine($"To display Steam profiles on the website from Steam, you need to provide the [yellow]Steam Web API key![/]");
+                AnsiConsole.MarkupLine("You can find it here: [link=https://steamcommunity.com/dev/apikey]https://steamcommunity.com/dev/apikey[/]");
+                var webApiKey = await AskAsync($" -> Key {Markup.Escape("[type 'disable' if you do not wish for Steam profiles to be displayed on the website]")}", Settings?.Steam?.WebApi?.IsValid() == true ? Settings?.Steam?.WebApi?.WebToken : "disable");
+                if (webApiKey == "disable")
+                {
+                    Settings?.Steam?.WebApi?.Enabled = false;
+                    Settings?.Steam?.WebApi?.WebToken = "your-token";
+                }
+                else
+                {
+                    Settings?.Steam?.WebApi?.Enabled = true;
+                    Settings?.Steam?.WebApi?.WebToken = webApiKey;
+                }
+            }, () => Settings?.Steam?.WebApi?.IsValid() == true),
+            new("IMAP (Email)", "DarkOrange", async () =>
+            {
+                AnsiConsole.MarkupLine("Now to make everything work smoothly and hands-free, we need your email. For the easiest setup we recommend a Gmail account");
+                AnsiConsole.MarkupLine("This will be used to automatically handle the authentication of Steam (if you are using SteamKit) and ModIO, so you need to have the same email for those two accounts.");
+                AnsiConsole.MarkupLine("For this we recommend an email created just for this purpose, as the program might have an issue finding the right message if you have a lot of these.");
+                AnsiConsole.MarkupLine("Gmail is recommended as it provides an easy way to do this (See [link=https://www.lifewire.com/what-are-the-gmail-imap-settings-1170852]https://www.lifewire.com/what-are-the-gmail-imap-settings-1170852[/])");
+                AnsiConsole.MarkupLine("If you do not wish to use this leave the fields empty, but it is recommended for a hands-free experience!");
+                var host = await AskAsync<string>(" -> Host: ", Settings?.Imap?.Host ?? "imap.gmail.com");
+                var port = await AskAsync<int>(" -> Port: ", Settings?.Imap?.Port ?? 993);
+                var mailUsername = await AskAsync<string>(" -> Username: ", Settings?.Imap?.Username ?? string.Empty);
+                var mailPassView = new TextPrompt<string>(" -> Password: ").Secret('*');
+                if(!string.IsNullOrWhiteSpace(Settings?.Imap?.Password))
+                    mailPassView = mailPassView.DefaultValue(Settings?.Imap?.Password ?? string.Empty);
+                var mailPassword = await AnsiConsole.PromptAsync(mailPassView);
+
+                Settings?.Imap?.Host = host;
+                Settings?.Imap?.Port = port;
+                Settings?.Imap?.Username = mailUsername;
+                Settings?.Imap?.Password = mailPassword;
+            }, () => Settings?.Imap?.IsValid() == true),
+            new("ModIO", "DeepSkyBlue3_1", async () =>
+            {
+                AnsiConsole.MarkupLine("Well now here comes the last one, but a tricky one - ModIO. This is responsible for providing the thumbnails of the modded levels/avatars");
+                AnsiConsole.MarkupLine("Let's start with the easy one - [DodgerBlue1]Personal Access Token[/]! This is only required for the fetching of mods from [yellow]collections[/]. This is used for the 'furry' filter you may have noticed on the website.");
+                AnsiConsole.MarkupLine("You can get it here: https://mod.io/me/access#tokens - When creating uncheck all permissions, set the scope to [lightgreen]Read[/] and the expiry date to the longest possible period. (Will implement automatic renewal later on)");
+                var personalAccessToken = await AskAsync($" -> Personal Access Token {Markup.Escape("[type 'disable' if you do not wish for the filter to work]: ")}", Settings?.ModIo?.PersonalAccessToken?.Content ?? "disable");
+                Settings?.ModIo?.PersonalAccessToken = personalAccessToken == "disable" ? Token.Disabled : new Token(personalAccessToken, -1);
+
+                const string yes = "Let me forget about any issue! (This will require access to an email address and will log in to provided ModIO account)";
+                const string no = "I don't trust you. (You will need to provide an access token and replace it yourself)";
+                const string disable = "Disable entirely. (This will disable the ModIO integration and thumbnails for mod.io levels/avatars will not be available)";
+
+                var choice = await AnsiConsole.PromptAsync(new SelectionPrompt<string>()
+                    .Title($"{Environment.NewLine}Well here's the tricky part - the tokens used for fetching thumbnails [bold red]don't last forever[/] and may need to be replaced. Do you wish to provide additional credentials to allow for automatic renewal or wish to replace the tokens yourself every now and then?")
+                    .AddChoices(yes, no, disable).DefaultValue(Settings?.ModIo?.Auth?.Use == true || Settings?.ModIo?.Auth == null ? yes : no));
+
+                if (choice == no)
+                {
+                    AnsiConsole.MarkupLine(
+                    $"{Environment.NewLine}That's a shame, but it's understandable. Let's get the access token then!");
+                    ThumbnailManager.Logger = new SpectreLogger();
+                    var success = await ThumbnailManager.Authenticate(false, false);
+                    AnsiConsole.MarkupLine(success
+                        ? "[lightgreen]Successfully authenticated with ModIO![/]"
+                        : "[red]Failed to authenticate with ModIO, well that's unfortunate[/]");
+                    Settings?.ModIo?.Auth?.Use = false;
+                    Settings?.ModIo?.Enabled = true;
+                }
+                else if (choice == yes)
+                {
+                    AnsiConsole.MarkupLine(
+                        $"{Environment.NewLine}This should be rather simple if you have a mod.io account linked to the same email as you set up in IMAP (if you did... relaunch the program if you haven't and wish to use this)");
+                    var guess = !string.IsNullOrWhiteSpace(Settings?.ModIo?.Auth?.Email) ? Settings?.ModIo?.Auth?.Email : GuessModIoEmail(Settings?.Imap);
+                    string modIoEmail = await AskAsync(" -> Email", guess);
+                    Settings?.ModIo?.Auth?.Email = modIoEmail;
+                    Settings?.ModIo?.Auth?.Use = true;
+                    Settings?.ModIo?.Enabled = true;
+                }else if(choice == disable){
+                    AnsiConsole.MarkupLine(
+                        $"{Environment.NewLine}That's a shame, but it's understandable. ModIO will be disabled and thumbnails for mod.io levels/avatars will [red]not be available[/]");
+                    Settings?.ModIo?.Enabled = false;
+                }
+
+                var cache = await AskAsync<ulong>("How long would you like for the external thumbnails to be [yellow]cached[/] for ([lightgreen]to avoid ratelimits[/], in seconds): ", Settings?.ModIo?.CacheExpireTime ?? 1800);
+                Settings?.ModIo?.CacheExpireTime = cache;
+                var cleanUp = await AskAsync<int>("How often do you wish to clean up [red]old and unused[/] external thumbnails ([lightgreen]to save on RAM[/], in seconds): ", Settings?.ModIo?.CleanupInterval ?? 3600);
+                Settings?.ModIo?.CleanupInterval = cleanUp;
+            }, () => Settings?.ModIo?.Token != Token.Empty && Settings?.ModIo?.PersonalAccessToken != Token.Empty)
+
+        ];
+
+        private static async Task<T> AskAsync<T>(string prompt, T? defaultValue, CancellationToken token = default)
+        {
+            var promptView = new TextPrompt<T>(prompt);
+            if (defaultValue != null && (typeof(T) != typeof(string) || !string.IsNullOrWhiteSpace(defaultValue?.ToString())))
+                promptView.DefaultValue(defaultValue);
+            return await AnsiConsole.PromptAsync(promptView, token);
+        }
+
+        private static async Task UserSetup()
+        {
+            Console.Clear();
+            AnsiConsole.WriteLine();
+            WriteHeader();
+            AnsiConsole.Write(Align.Center(new Markup($"{Environment.NewLine}Thanks for using Fusion Lobby Browser (or in short, FLB)! It seems that you are running the application for the first time!")));
+            AnsiConsole.Write(Align.Center(new Markup($"I'll help you [yellow]configure the settings[/] so that you can get it running right away!{Environment.NewLine}")));
+
+            AnsiConsole.MarkupLine($"{Environment.NewLine}Okay, first the most basic thing - [cyan]the interval[/]! The lobbies don't get fetched on every request, to avoid [red]rate limits[/] we need to store them and update every few seconds");
+            AnsiConsole.MarkupLine($"Epic Games allows for a maximum of 30 requests per minute, while the Steam API does not clearly state its rate limits - just keep in mind that on every fetch there are 2 requests made, one for public lobbies and one for friends only.");
+            AnsiConsole.MarkupLine($"That makes for 15 requests per minute for Epic Games, a safe and tested interval is 30 seconds, though you can try using lower values, but things might break");
+            var interval =
+                await AnsiConsole.AskAsync(
+                    $"{Environment.NewLine} -> How often do you wish to fetch the lobbies, keep the rate limits in mind! (in seconds): ", 30, CancellationToken.None);
+            Settings?.Interval = interval;
+
+            AnsiConsole.MarkupLine($"{Environment.NewLine}Now the next thing - [IndianRed1]Steam[/]! There are currently two ways to access Steam's API - using SteamKit or Steamworks, but what's the difference?");
+            AnsiConsole.MarkupLine("Steamworks is by far the simplest, doesn't require any additional setup for credentials, BUT it requires to have the Steam app open with a logged in account, which may be hard on a dedicated server");
+            AnsiConsole.MarkupLine("On the other side SteamKit is more complex to set up and will require additional steps, but it doesn't require the Steam app to be running. You will need to provide the login credentials (username and password) as well as provide access to the email to automatically authenticate with 2FA if enabled");
+
+            var steamHandler = await AnsiConsole.PromptAsync(new SelectionPrompt<string>()
+                .Title($"{Environment.NewLine}{Environment.NewLine}So now's the question - which one would you like to use? This can be changed later in the configuration file")
+                .AddChoices("Steamworks", "SteamKit").DefaultValue(Settings?.Steam?.Handler), CancellationToken.None);
+            Settings?.Steam?.Handler = steamHandler;
+
+            AnsiConsole.MarkupLine($"{Environment.NewLine}Now the next thing - [yellow]the credentials[/]! This is gonna take some time to set up if you're not prepared already");
+            AnsiConsole.MarkupLine($"This will consist of [CornflowerBlue]{steps.Count} different steps[/], some if not most you will be able to skip but this will break some functionality on the website!");
+            AnsiConsole.MarkupLine($"[Chartreuse1]Let's get started![/]");
+
+            int index = 0;
+            foreach (var step in steps)
+                await step.Run(index++, steps.Count);
+
+            AnsiConsole.Clear();
+            Settings?.Setup = true;
+            SaveSettings();
+
+            AnsiConsole.MarkupLine("That's everything! You're all set! Launching program in 3 seconds");
+            await Task.Delay(3000, CancellationToken.None);
+            Console.Clear();
+        }
+
+        private static void WriteHeader()
+        {
+            var font = FigletFont.Load(Path.Combine(CurrentDir, "ansi.flf"));
+            var figlet = new FigletText(font, "FLB")
+                .Color(Color.Cyan)
+                .Justify(Justify.Center);
+            AnsiConsole.Write(figlet);
+            AnsiConsole.Write(Align.Center(new Markup($"{Environment.NewLine}Author: [bold CornflowerBlue]HAHOOS[/] • Version: [bold yellow]v{Program.Version}[/]")));
+        }
+
+        public static string? GuessModIoEmail(ImapAuth? auth)
+        {
+            if (auth?.IsValid() != true)
+                return null;
+
+            var emailValidate = EmailValidationRegex;
+            var getHost = GetHostRegex;
+            if (auth.Host == "imap.gmail.com")
+                return emailValidate.IsMatch(auth.Username!) ? auth.Username : $"{auth.Username}@gmail.com";
+
+            return emailValidate.IsMatch(auth.Username!) ? auth.Username : $"{auth.Username}@{getHost.Match(auth.Host!).Groups["host"].Value}";
         }
 
         public static string ReplaceRegex(this string text, string pattern, string replacement)
@@ -288,75 +459,22 @@ namespace FLB_API
                     if (AuthCancel != null)
                         await AuthCancel.CancelAsync();
                     AuthCancel = new CancellationTokenSource();
-                    return await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow] > Enter the code from your authenticator: [/]"), AuthCancel.Token);
+                    return await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow] > Enter the code from your authenticator[/]"), AuthCancel.Token);
                 },
                 async (email, _) => await GetCodeFromEmail(client.Handler.Logger, email)
                 );
-            if (string.IsNullOrWhiteSpace(Settings?.Authentication?.Username) || string.IsNullOrWhiteSpace(Settings?.Authentication?.Password))
+            if (string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Username) || string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Password))
             {
-                metadata.Add("username", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Username:[/] ")));
-                metadata.Add("password", await AnsiConsole.PromptAsync(new TextPrompt<string>("[bold yellow]Steam Password:[/] ")));
+                metadata.Add("username", await AnsiConsole.AskAsync<string>("[bold yellow]Steam Username[/]", CancellationToken.None));
+                metadata.Add("password", await AnsiConsole.AskAsync<string>("[bold yellow]Steam Password[/]", CancellationToken.None));
             }
             else
             {
-                metadata.Add("username", Settings.Authentication.Username);
-                metadata.Add("password", Settings.Authentication.Password);
+                metadata.Add("username", Settings.Steam.SteamKitAuth.Username);
+                metadata.Add("password", Settings.Steam.SteamKitAuth.Password);
             }
             Logger?.Information("Using provided login to authenticate");
             return metadata;
-        }
-
-        private static async Task<Tuple<ILogger.LogLevel, string>> AskUser()
-        {
-            // I FUCKING HATE VISUAL STUDIO, WHY DO I HAVE TO DISABLE 3 FUCKING WARNINGS.
-#pragma warning disable RCS1222
-#pragma warning disable IDE0079
-#pragma warning disable S3878
-            var level = await AnsiConsole.PromptAsync(new SelectionPrompt<ILogger.LogLevel>()
-                .Title("Logger level for the service responsible for connecting to:")
-                .AddChoices(
-                [
-                    ILogger.LogLevel.Trace,
-                    ILogger.LogLevel.Info,
-                    ILogger.LogLevel.Warning,
-                    ILogger.LogLevel.Error
-                ])
-                );
-            Logger?.Information("Selected log level: {0}", level.ToString());
-
-            var choice = await AnsiConsole.PromptAsync(new SelectionPrompt<string>()
-                .Title("Select how to connect to the Steam API:")
-                .AddChoices(
-                [
-                    "Steamworks (no auth, requires steam client open)",
-                    "SteamKit (requires auth, steam client not required)"
-                ]));
-#pragma warning restore S3878
-#pragma warning restore IDE0079
-#pragma warning restore RCS1222
-            Logger?.Information("Selected service: {0}", choice);
-            return new Tuple<ILogger.LogLevel, string>(level, choice);
-        }
-
-        private static async Task SavePreferences(ILogger.LogLevel level, string choice)
-        {
-            if (Settings == null)
-                return;
-
-            Logger?.Information("Saving settings...");
-            var path = Path.Combine(CurrentDir, "settings.json");
-            Settings.Preferences = new Preferences()
-            {
-                Use = true,
-                LogLevel = level,
-                AuthHandler = choice.StartsWith("SteamKit") ? "SteamKit" : "Steamworks"
-            };
-            await using var stream = File.CreateText(path);
-            var serialized = JsonSerializer.Serialize(Settings);
-            await stream.WriteAsync(serialized);
-            await stream.FlushAsync();
-            stream.Close();
-            Logger?.Information("Successfully saved settings!");
         }
 
         private static async Task GetLobbies(CancellationToken token)
@@ -410,7 +528,7 @@ namespace FLB_API
             }
             else
             {
-                if (Settings?.Preferences?.LaunchDiscordBot == true)
+                if (Settings?.Discord?.Enabled == true)
                 {
                     Logger?.Information("Setting up discord bot");
                     _ = DiscordBotManager.Setup();
@@ -446,21 +564,21 @@ namespace FLB_API
             {
                 logger?.Warning("Empty IMAP Configuration, falling back to manual input...");
                 AuthCancel = new CancellationTokenSource();
-                return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
+                return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email})[/]"), AuthCancel.Token);
             }
             else
             {
                 try
                 {
                     logger?.Info("Using IMAP to fetch Steam Auth Code...");
-                    await Task.Delay((int)3.5f * 1000);
+                    await Task.Delay((int)3.5f * 1000, CancellationToken.None);
                     ImapManager ??= new IMAPManager(Settings!.Imap!, logger, true);
                     var code = await ImapManager.GetCodeAsync(IMAPManager.GetSteamRegEx());
                     if (string.IsNullOrWhiteSpace(code))
                     {
                         logger?.Error("Failed to retrieve the code from email, please check the email and type in the code manually");
                         AuthCancel = new CancellationTokenSource();
-                        return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
+                        return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email})[/]"), AuthCancel.Token);
                     }
                     logger?.Info("Successfully retrieved Steam Auth Code from email");
                     return code;
@@ -470,7 +588,7 @@ namespace FLB_API
                     logger?.Error("Failed to retrieve the code from email", ex);
                     logger?.Info("Falling back to manual input...");
                     AuthCancel = new CancellationTokenSource();
-                    return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email}): [/]"), AuthCancel.Token);
+                    return await AnsiConsole.PromptAsync(new TextPrompt<string>($"[bold yellow] > Enter the code sent to your email ({email})[/]"), AuthCancel.Token);
                 }
             }
         }
@@ -485,20 +603,20 @@ namespace FLB_API
             try
             {
                 Logger?.Information("Loading settings...");
-                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                var path = Options?.ConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
                 if (!File.Exists(path))
                 {
-                    Logger?.Information("Settings file is missing, creating new and exiting application...");
+                    Logger?.Information("Settings file is missing, creating...");
                     using var stream = File.CreateText(path);
-                    var serialized = JsonSerializer.Serialize(DefaultSettings);
+                    var serialized = JsonSerializer.Serialize(Settings.Default, JsonSettingsOptions);
                     stream.Write(serialized);
                     stream.Flush();
                     stream.Close();
-                    Environment.Exit(0);
+                    Settings = Settings.Default;
                 }
                 else
                 {
-                    Settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path));
+                    Settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), JsonSettingsOptions);
                     Logger?.Information("Successfully loaded settings!");
                 }
             }
@@ -512,10 +630,10 @@ namespace FLB_API
         {
             try
             {
-                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                var path = Options?.ConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
                 Logger?.Information("Saving settings");
                 using var stream = File.CreateText(path);
-                var serialized = JsonSerializer.Serialize(Settings);
+                var serialized = JsonSerializer.Serialize(Settings, JsonSettingsOptions);
                 stream.Write(serialized);
                 stream.Flush();
                 stream.Close();
@@ -535,6 +653,40 @@ namespace FLB_API
                 Content = message,
                 ContentType = contentType
             };
+        }
+
+        [GeneratedRegex(@"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")]
+        private static partial Regex EmailValidationRegex { get; }
+
+        [GeneratedRegex(@"^(?:[a-zA-Z0-9-]+\.)*(?<host>[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$")]
+        private static partial Regex GetHostRegex { get; }
+    }
+
+    public class CredentialStep(string name, string color, Func<Task> callback, Func<bool> isConfigured)
+    {
+        public Func<Task> Callback { get; set; } = callback;
+
+        public Func<bool> IsConfigured { get; set; } = isConfigured;
+
+        public string Name { get; set; } = name;
+
+        public string Color { get; set; } = color;
+
+        public async Task Run(int stepNum, int totalSteps)
+        {
+            AnsiConsole.MarkupLine($"{Environment.NewLine}{Environment.NewLine}[bold {Color}]{Markup.Escape($"[{stepNum + 1}/{totalSteps}]")} {Name}[/]");
+            if (IsConfigured.Invoke())
+            {
+                var prompt = await AnsiConsole.PromptAsync(new SelectionPrompt<string>()
+                    .Title($"{Environment.NewLine}It seems like this has already been configured! Would you like to reconfigure?")
+                    .AddChoices("Yes", "No"));
+                if (prompt == "Yes")
+                    await Callback.Invoke();
+            }
+            else
+            {
+                await Callback.Invoke();
+            }
         }
     }
 }

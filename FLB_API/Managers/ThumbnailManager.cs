@@ -42,6 +42,12 @@ namespace FLB_API.Managers
 
         public static async Task Setup()
         {
+            if (Program.Settings?.ModIo?.Enabled == false)
+            {
+                Logger?.Info("Mod.io is disabled, skipping setup...");
+                return;
+            }
+
             HttpClient.DefaultRequestHeaders.Add("User-Agent", "FLB/1.0.0");
             lock (Lock)
             {
@@ -125,15 +131,20 @@ namespace FLB_API.Managers
             });
         }
 
-        private static async Task Authenticate()
+        public static async Task<bool> Authenticate(bool useAccountToken = true, bool saveToSettings = true, Action<string>? waitingForCodeCallback = null)
         {
             if (IsAuthenticating)
             {
-                if (Program.Settings?.ModIo?.AccountToken?.IsValid() == true || Program.Settings?.ModIo?.Auth?.Use == true) return;
+                if ((Program.Settings?.ModIo?.AccountToken?.IsValid() == true ||
+                     Program.Settings?.ModIo?.Auth?.Use == true) && useAccountToken)
+                {
+                    while (IsAuthenticating) await Task.Delay(100);
+                    return true;
+                }
                 Logger?.Info("No account token provided, please log in using the following URL: {0}", AuthCode.LoginUrl ?? "N/A");
                 Logger?.Info("You have until {0} to log in!", DateTimeOffset.FromUnixTimeSeconds(AuthCode.DateExpires));
-
-                return;
+                while (IsAuthenticating) await Task.Delay(100);
+                return true;
             }
 
             try
@@ -149,6 +160,7 @@ namespace FLB_API.Managers
                 Logger?.Info("Awaiting response to get code...");
                 var bytes = ArrayPool<byte>.Shared.Rent(4096);
                 var result = await ws.ReceiveAsync(bytes, CancellationToken.None);
+                Logger?.Info("Received response! Decoding...");
                 var res = Encoding.UTF8.GetString(bytes, 0, result.Count);
                 var initialMessage = JsonSerializer.Deserialize<WebSocketMessages>(res);
                 var first = initialMessage?.Messages?.FirstOrDefault();
@@ -156,7 +168,7 @@ namespace FLB_API.Managers
                 {
                     Logger?.Error("The initial message is not a device login message.");
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    return;
+                    return false;
                 }
 
                 var context = first.Context.Deserialize<DeviceLoginInitialResponseContext>();
@@ -165,21 +177,22 @@ namespace FLB_API.Managers
                 {
                     Logger?.Error("Provided code from the WebSocket is empty.");
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    return;
+                    return false;
                 }
+
                 Logger?.Info("Logging in using code {0}", context.Code);
 
                 var dontSendReq = false;
 
                 if (Program.Settings?.ModIo?.AccountToken?.IsValid() != true)
-                    dontSendReq = await NotLoggedIn(context);
+                    dontSendReq = await NotLoggedIn(context, saveToSettings, waitingForCodeCallback);
 
                 if (!dontSendReq && !await SendAuthReq(context.Code))
                 {
                     Logger?.Error(
                         "Failed to authenticate with the provided code. Ensure that the account token is correct!");
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    return;
+                    return false;
                 }
 
                 var aBytes = ArrayPool<byte>.Shared.Rent(4096);
@@ -188,37 +201,49 @@ namespace FLB_API.Managers
                 var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
                 var authFirst = aMessage?.Messages?.FirstOrDefault();
 
-                if (authFirst is not { Operation: "login_success" } || authFirst?.Context.TryGetProperty("access_token", out _) != true)
+                if (authFirst is not { Operation: "login_success" } ||
+                    authFirst?.Context.TryGetProperty("access_token", out _) != true)
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
 
                 var finalContext = authFirst!.Context.Deserialize<DeviceLoginFinalResponseContext>();
                 Logger?.Info("Successfully authenticated! Token expires at {0}",
                     DateTimeOffset.FromUnixTimeSeconds(finalContext.DateExpires));
                 Program.Settings?.ModIo?.Token = new Token(finalContext.AccessToken!, finalContext.DateExpires);
-                Program.SaveSettings();
+                if (saveToSettings)
+                    Program.SaveSettings();
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error("An error occurred while authenticating", ex);
+                IsAuthenticating = false;
+                return false;
             }
             finally
             {
                 IsAuthenticating = false;
             }
+
+            return true;
         }
 
-        private static async Task<bool> NotLoggedIn(DeviceLoginInitialResponseContext context)
+        private static async Task<bool> NotLoggedIn(DeviceLoginInitialResponseContext context, bool saveToSettings = true, Action<string>? waitingForCodeCallback = null)
         {
             var manual = true;
             if (Program.Settings?.ModIo?.Auth?.Use == true)
             {
                 Logger?.Info("Account token not provided or has expired, attempting to log in");
-                var success = await LogIn();
-                if (!success)
+                try
                 {
-                    Logger?.Error(
-                        "Failed to log in with the provided credentials. Manual login required.");
+                    var success = await LogIn(saveToSettings);
+                    if (!success)
+                        Logger?.Error("Failed to log in with the provided credentials. Manual login required.");
+                    else
+                        manual = false;
                 }
-                else
+                catch (Exception ex)
                 {
-                    manual = false;
+                    Logger?.Error("Failed to log in with the provided credentials.", ex);
                 }
             }
 
@@ -230,10 +255,11 @@ namespace FLB_API.Managers
                 context.LoginUrl ?? "N/A");
             Logger?.Info("You have until {0} to log in!",
                 DateTimeOffset.FromUnixTimeSeconds(context.DateExpires));
+            waitingForCodeCallback?.Invoke(context.Code!);
             return true;
         }
 
-        private static async Task<bool> LogIn()
+        private static async Task<bool> LogIn(bool saveToSettings = true)
         {
             var email = Program.Settings?.ModIo?.Auth?.Email;
             if (string.IsNullOrWhiteSpace(email))
@@ -316,7 +342,8 @@ namespace FLB_API.Managers
             Logger?.Info("Token is valid until {0}", DateTimeOffset.FromUnixTimeSeconds(json.RootElement.GetProperty("date_expires").GetInt64()));
 
             Program.Settings?.ModIo?.AccountToken = new Token(json.RootElement.GetProperty("access_token").GetString() ?? string.Empty, json.RootElement.GetProperty("date_expires").GetInt64());
-            Program.SaveSettings();
+            if (saveToSettings)
+                Program.SaveSettings();
 
             return true;
         }
@@ -341,7 +368,7 @@ namespace FLB_API.Managers
             if (Program.Settings?.ModIo?.Token?.IsValid() != true)
             {
                 Logger?.Warning("Mod.io token is invalid or has expired. Cannot fetch remote mod thumbnail. Attempting to re-authenticate...");
-                _ = Task.Run(Authenticate);
+                _ = Task.Run(async () => await Authenticate());
                 return null;
             }
 
@@ -352,7 +379,7 @@ namespace FLB_API.Managers
             if (!response.IsSuccessStatusCode)
             {
                 Logger?.Error($"Failed to fetch remote mod thumbnail. {CreateErrMsg(await response.Content.ReadAsStringAsync(), (int)response.StatusCode)}");
-                if (response.StatusCode == HttpStatusCode.Unauthorized) _ = Task.Run(Authenticate);
+                if (response.StatusCode == HttpStatusCode.Unauthorized) _ = Task.Run(async () => await Authenticate());
                 return null;
             }
             var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
@@ -365,13 +392,20 @@ namespace FLB_API.Managers
             return thumbnail is null ? null : new RemoteThumbnailResponse(modId, thumbnail, DateTimeOffset.Now.AddSeconds((long)(Program.Settings?.ModIo?.CacheExpireTime ?? 30 * 60)), maturity);
         }
 
+        // TODO: automatically renew the personal access token when expired with the account token
         public static async Task FetchAvatarsFromCollection()
         {
             Logger?.Info("Getting avatars from collection {0}", CollectionId);
 
-            if (string.IsNullOrWhiteSpace(Program.Settings?.ModIo?.PersonalAccessToken))
+            if (Program.Settings?.ModIo?.PersonalAccessToken?.IsValid() != true)
             {
-                Logger?.Warning("Mod.io personal access token is not set. Cannot fetch mods.");
+                Logger?.Warning("Mod.io personal access token is invalid or has expired. Cannot fetch mods.");
+                return;
+            }
+
+            if (Program.Settings?.ModIo?.PersonalAccessToken?.IsEnabled() != true)
+            {
+                Logger?.Warning("Usage of the Mod.io personal access token is disabled. Cannot fetch mods.");
                 return;
             }
 
@@ -381,7 +415,10 @@ namespace FLB_API.Managers
 
             do
             {
-                Logger?.Info("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
+                if (total != -1)
+                    Logger?.Info("Fetching avatars... ({0} offset out of {1})", offset, total == -1 ? "unknown" : total);
+                else
+                    Logger?.Info("Fetching avatars... ({0} offset)", offset);
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://g-{GameId}.modapi.io/v1/games/{GameId}/collections/{CollectionId}/mods?_offset={offset}");
                 request.Headers.Add("Authorization", $"Bearer {Program.Settings.ModIo.PersonalAccessToken}");
                 request.Headers.Add("Accept", "application/json");

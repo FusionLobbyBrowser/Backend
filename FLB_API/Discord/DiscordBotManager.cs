@@ -24,13 +24,13 @@ namespace FLB_API.Discord
         public static async Task Setup()
         {
             Logger = new Logger("Discord");
-            if (string.IsNullOrWhiteSpace(Program.Settings?.DiscordBotToken))
+            if (string.IsNullOrWhiteSpace(Program.Settings?.Discord?.Token))
             {
                 Logger.Error("The discord bot token cannot be empty!");
                 return;
             }
 
-            Client = new GatewayClient(new BotToken(Program.Settings.DiscordBotToken), new GatewayClientConfiguration
+            Client = new GatewayClient(new BotToken(Program.Settings.Discord.Token), new GatewayClientConfiguration
             {
                 Intents = null,
                 Logger = new SerilogLogger(Logger) { Level = LogLevel.Trace },

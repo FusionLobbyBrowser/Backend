@@ -6,6 +6,8 @@ namespace FusionAPI
 {
     public class Fusion(IMatchmakingHandler handler)
     {
+        public const string Version = "1.0.0";
+
         public const uint APP_ID = 250820;
 
         public IMatchmakingHandler Handler { get; set; } = handler;

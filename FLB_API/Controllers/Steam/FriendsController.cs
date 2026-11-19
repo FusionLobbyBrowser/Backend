@@ -23,13 +23,17 @@ namespace FLB_API.Controllers.Steam
         [Tags("Steam")]
         [EndpointSummary("Get the Steam friends of the currently authenticated user")]
         [ProducesResponseType<List<JsonPlayerSummaryModel>>(200, "application/json", Description = "Returns the friends list of the specified user")]
-        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "Attempted to check a friends list of a user you are not logged in as")]
-        [ProducesResponseType<ProblemDetails>(401, contentType: "application/problem+json", Description = "The user is not signed in or has their friends list private")]
         [ProducesResponseType<ProblemDetails>(400, contentType: "application/problem+json", Description = "Steam API returned no friends for such ID")]
+        [ProducesResponseType<ProblemDetails>(401, contentType: "application/problem+json", Description = "The user is not signed in or has their friends list private")]
+        [ProducesResponseType<ProblemDetails>(500, contentType: "application/problem+json", Description = "Backend is not properly set up for using Steam API")]
+        [ProducesResponseType<ProblemDetails>(501, contentType: "application/problem+json", Description = "Feature is disabled")]
         public async Task<IActionResult> Get()
         {
-            if (string.IsNullOrWhiteSpace(Program.Settings?.SteamWebApiToken))
-                return Problem("Backend is not set up for using Steam API!", statusCode: 500, title: "Not Set Up");
+            if (Program.Settings?.Steam?.WebApi?.Enabled == false)
+                return Problem("The server does not support fetching Steam profiles as the functionality has been disabled by the person hosting", statusCode: 501, title: "Feature Disabled");
+
+            if (Program.Settings?.Steam?.WebApi?.IsValid() != true)
+                return Problem("Backend is not properly set up for using Steam Web API!", statusCode: 500, title: "Not Set Up");
 
             var id = User.GetSteamId();
             if (User.GetSteamId() == -1)
@@ -62,7 +66,7 @@ namespace FLB_API.Controllers.Steam
                     return cache.Value;
             }
 
-            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebApiToken);
+            var factory = new SteamWebInterfaceFactory(Program.Settings!.Steam!.WebApi!.WebToken);
             var user = factory.CreateSteamWebInterface<SteamUser>(ProfileController.HttpClient);
 
             var summaries = await user.GetFriendsListAsync(id);
@@ -81,7 +85,7 @@ namespace FLB_API.Controllers.Steam
             if (cache.Value?.Friends != null && !((DateTimeOffset.Now - cache.Value.Start).TotalSeconds > CacheTime))
                 return cache.Value.Friends?.Select(x => x.SteamId)?.ToArray() ?? [];
 
-            var factory = new SteamWebInterfaceFactory(Program.Settings!.SteamWebApiToken);
+            var factory = new SteamWebInterfaceFactory(Program.Settings!.Steam!.WebApi!.WebToken);
             var user = factory.CreateSteamWebInterface<SteamUser>(ProfileController.HttpClient);
 
             var list = await user.GetFriendsListAsync(id);
