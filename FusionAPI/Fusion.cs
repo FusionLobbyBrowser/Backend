@@ -42,12 +42,12 @@ namespace FusionAPI
                 if (!LobbiesUptime.TryGetValue(metadata.LobbyInfo!.LobbyID, out var value))
                 {
                     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
-                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, new UptimeData { Uptime = now, Privacy = metadata.LobbyInfo!.Privacy });
+                    LobbiesUptime.Add(metadata.LobbyInfo.LobbyID, new UptimeData { Uptime = now, Privacy = metadata.LobbyInfo.Privacy });
                     uptime = now;
                 }
-                else if (value.Privacy != metadata.LobbyInfo!.Privacy)
+                else if (value.Privacy != metadata.LobbyInfo.Privacy)
                 {
-                    LobbiesUptime[metadata.LobbyInfo.LobbyID] = value with { Privacy = metadata.LobbyInfo!.Privacy };
+                    LobbiesUptime[metadata.LobbyInfo.LobbyID] = value with { Privacy = metadata.LobbyInfo.Privacy };
                     uptime = value.Uptime;
                 }
                 else

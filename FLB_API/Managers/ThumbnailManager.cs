@@ -40,6 +40,8 @@ namespace FLB_API.Managers
 
         private static DeviceLoginInitialResponseContext AuthCode { get; set; }
 
+        private static string GetAuthEndPoint(string path) => $"https://auth.mod.io/auth/{path}";
+
         public static async Task Setup()
         {
             if (Program.Settings?.ModIo?.Enabled == false)
@@ -201,8 +203,7 @@ namespace FLB_API.Managers
                 var aMessage = JsonSerializer.Deserialize<WebSocketMessages>(ares);
                 var authFirst = aMessage?.Messages?.FirstOrDefault();
 
-                if (authFirst is not { Operation: "login_success" } ||
-                    authFirst?.Context.TryGetProperty("access_token", out _) != true)
+                if (authFirst is not { Operation: "login_success" } || authFirst?.Context.TryGetProperty("access_token", out _) != true)
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
 
                 var finalContext = authFirst!.Context.Deserialize<DeviceLoginFinalResponseContext>();
@@ -276,7 +277,7 @@ namespace FLB_API.Managers
 
             Logger?.Info("Sending request for OTP");
             using var request =
-                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/emailrequest");
+                new HttpRequestMessage(HttpMethod.Post, GetAuthEndPoint("emailrequest"));
             request.Headers.Add("Accept", "application/json");
             var body = new List<KeyValuePair<string, string>> { new("email", email) };
             request.Content = new FormUrlEncodedContent(body);
@@ -319,7 +320,7 @@ namespace FLB_API.Managers
             Logger?.Info("Logging in to retrieve account token");
 
             using var exchangeRequest =
-                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/emailexchange");
+                new HttpRequestMessage(HttpMethod.Post, GetAuthEndPoint("emailexchange"));
             exchangeRequest.Headers.Add("Accept", "application/json");
             var exchangeBody = new List<KeyValuePair<string, string>> { new("code", code) };
             exchangeRequest.Content = new FormUrlEncodedContent(exchangeBody);
@@ -351,7 +352,7 @@ namespace FLB_API.Managers
         private static async Task<bool> SendAuthReq(string code)
         {
             using var request =
-                new HttpRequestMessage(HttpMethod.Post, "https://auth.mod.io/auth/device/connect");
+                new HttpRequestMessage(HttpMethod.Post, GetAuthEndPoint("device/connect"));
             request.Headers.Add("Authorization", $"Bearer {Program.Settings?.ModIo?.AccountToken}");
             request.Headers.Add("Accept", "application/json");
             var body = new List<KeyValuePair<string, string>> { new("code", code) };

@@ -18,7 +18,7 @@ namespace FLB_API
 
         public Fusion? Client { get; set; }
 
-        public bool? AutoReInit { get; set; } = true;
+        public bool? AutoReInit { get; set; }
 
         private Dictionary<string, string>? _metadata;
 
@@ -58,7 +58,7 @@ namespace FLB_API
         public async Task<CustomLobbyInfo[]> FetchLobbies()
             => await FetchLobbies(null);
 
-        internal async Task<CustomLobbyInfo[]> FetchLobbies(Stopwatch? stopwatch = null)
+        internal async Task<CustomLobbyInfo[]> FetchLobbies(Stopwatch? stopwatch)
         {
             stopwatch ??= Stopwatch.StartNew();
             if (Client?.Handler?.IsInitialized == true)

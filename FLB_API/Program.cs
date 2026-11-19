@@ -255,13 +255,13 @@ namespace FLB_API
                 {
                     Settings?.Discord?.Enabled = false;
                     Settings?.Discord?.Token = "disable";
-                    AnsiConsole.MarkupLine($"First feature [red]disabled[/]! Let's see how many others will suffer a fate like this");
+                    AnsiConsole.MarkupLine("First feature [red]disabled[/]! Let's see how many others will suffer a fate like this");
                 }
                 else
                 {
                     Settings?.Discord?.Enabled = true;
                     Settings?.Discord?.Token = discordToken;
-                    AnsiConsole.MarkupLine($"Onto the next one!");
+                    AnsiConsole.MarkupLine("Onto the next one!");
                 }
             }, () => Settings?.Discord?.Enabled == true && TokenUtils.TryValidateToken(Settings?.Discord?.Token ?? string.Empty)),
             new("SteamKit", "IndianRed1", async () =>
@@ -280,7 +280,7 @@ namespace FLB_API
             }, () => !string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Username) && !string.IsNullOrWhiteSpace(Settings?.Steam?.SteamKitAuth?.Password)),
             new("Steam Web API", "LightCyan3", async () =>
             {
-                AnsiConsole.MarkupLine($"To display Steam profiles on the website from Steam, you need to provide the [yellow]Steam Web API key![/]");
+                AnsiConsole.MarkupLine("To display Steam profiles on the website from Steam, you need to provide the [yellow]Steam Web API key![/]");
                 AnsiConsole.MarkupLine("You can find it here: [link=https://steamcommunity.com/dev/apikey]https://steamcommunity.com/dev/apikey[/]");
                 var webApiKey = await AskAsync($" -> Key {Markup.Escape("[type 'disable' if you do not wish for Steam profiles to be displayed on the website]")}", Settings?.Steam?.WebApi?.IsValid() == true ? Settings?.Steam?.WebApi?.WebToken : "disable");
                 if (webApiKey == "disable")
@@ -382,8 +382,8 @@ namespace FLB_API
             AnsiConsole.Write(Align.Center(new Markup($"I'll help you [yellow]configure the settings[/] so that you can get it running right away!{Environment.NewLine}")));
 
             AnsiConsole.MarkupLine($"{Environment.NewLine}Okay, first the most basic thing - [cyan]the interval[/]! The lobbies don't get fetched on every request, to avoid [red]rate limits[/] we need to store them and update every few seconds");
-            AnsiConsole.MarkupLine($"Epic Games allows for a maximum of 30 requests per minute, while the Steam API does not clearly state its rate limits - just keep in mind that on every fetch there are 2 requests made, one for public lobbies and one for friends only.");
-            AnsiConsole.MarkupLine($"That makes for 15 requests per minute for Epic Games, a safe and tested interval is 30 seconds, though you can try using lower values, but things might break");
+            AnsiConsole.MarkupLine("Epic Games allows for a maximum of 30 requests per minute, while the Steam API does not clearly state its rate limits - just keep in mind that on every fetch there are 2 requests made, one for public lobbies and one for friends only.");
+            AnsiConsole.MarkupLine("That makes for 15 requests per minute for Epic Games, a safe and tested interval is 30 seconds, though you can try using lower values, but things might break");
             var interval =
                 await AnsiConsole.AskAsync(
                     $"{Environment.NewLine} -> How often do you wish to fetch the lobbies, keep the rate limits in mind! (in seconds): ", 30, CancellationToken.None);
@@ -400,7 +400,7 @@ namespace FLB_API
 
             AnsiConsole.MarkupLine($"{Environment.NewLine}Now the next thing - [yellow]the credentials[/]! This is gonna take some time to set up if you're not prepared already");
             AnsiConsole.MarkupLine($"This will consist of [CornflowerBlue]{steps.Count} different steps[/], some if not most you will be able to skip but this will break some functionality on the website!");
-            AnsiConsole.MarkupLine($"[Chartreuse1]Let's get started![/]");
+            AnsiConsole.MarkupLine("[Chartreuse1]Let's get started![/]");
 
             int index = 0;
             foreach (var step in steps)
@@ -439,7 +439,7 @@ namespace FLB_API
         }
 
         public static string ReplaceRegex(this string text, string pattern, string replacement)
-            => Regex.Replace(text, pattern, replacement);
+            => Regex.Replace(text, pattern, replacement, RegexOptions.None, TimeSpan.FromSeconds(3));
 
         private static async Task<Dictionary<string, string>> SetupSteamKit(Fusion? client)
         {
